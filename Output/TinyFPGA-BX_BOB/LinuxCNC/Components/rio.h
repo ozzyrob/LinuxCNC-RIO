@@ -1,6 +1,9 @@
 #ifndef RIO_H
 #define RIO_H
 
+#define TRANSPORT_SPI
+#define SPI_SPEED BCM2835_SPI_CLOCK_DIVIDER_128
+
 #define JOINTS               5
 #define JOINT_ENABLE_BYTES   1
 #define VARIABLE_OUTPUTS     1
@@ -26,15 +29,20 @@
 #define VOUT_TYPE_RCSERVO 1
 #define VOUT_TYPE_SINE 2
 #define VOUT_TYPE_FREQ 3
+#define VOUT_TYPE_UDPOTI 4
 #define JOINT_FB_REL 0
 #define JOINT_FB_ABS 1
+#define JOINT_STEPPER 0
+#define JOINT_RCSERVO 1
+#define JOINT_PWMDIR  2
 float vout_min[VARIABLE_OUTPUTS] = {-100};
 float vout_max[VARIABLE_OUTPUTS] = {100.0};
 float vout_freq[VARIABLE_OUTPUTS] = {10000};
 uint8_t vout_type[VARIABLE_OUTPUTS] = {VOUT_TYPE_PWM};
 
 uint8_t joints_fb_type[JOINTS] = {JOINT_FB_REL, JOINT_FB_REL, JOINT_FB_REL, JOINT_FB_REL, JOINT_FB_REL};
-uint8_t joints_fb_scale[JOINTS] = {1.0, 1.0, 1.0, 1.0, 1.0};
+
+uint8_t joints_type[JOINTS] = {JOINT_STEPPER, JOINT_STEPPER, JOINT_STEPPER, JOINT_STEPPER, JOINT_STEPPER};
 
 typedef union {
     struct {

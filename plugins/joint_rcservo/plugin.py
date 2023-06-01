@@ -36,6 +36,17 @@ class Plugin:
                 )
         return pinlist_out
 
+    def variables(self):
+        variables = []
+        for num, joint in enumerate(self.jdata["joints"]):
+            if joint["type"] == "rcservo":
+                variables.append({"dir": "OUT", "type": "JOINT_VEL", "calc": "rcservo", "size": 32, "joint": num})
+                if not joint.get("cl____"):
+                    variables.append({"dir": "IN", "type": "JOINT_FB", "calc": "counter", "size": 32, "joint": num})
+                variables.append({"dir": "OUT", "type": "JOINT_ENABLE", "size": 1, "joint": num})
+
+        return variables
+
     def joints(self):
         joints_out = 0
         for _num, joint in enumerate(self.jdata["joints"]):

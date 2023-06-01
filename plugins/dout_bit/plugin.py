@@ -22,6 +22,13 @@ class Plugin:
             pinlist_out.append((f"DOUT{num}", dout["pin"], "OUTPUT"))
         return pinlist_out
 
+    def variables(self):
+        variables = []
+        for num, dout in enumerate(self.jdata["dout"]):
+            variables.append({"dir": "OUT", "type": "BIT", "size": 1, "dout": num})
+
+        return variables
+
     def douts(self):
         douts_out = 0
         for _num, _pwmout in enumerate(self.jdata["dout"]):

@@ -31,25 +31,37 @@
 #include <stdio.h>
 #include <string.h>
 
-
-// Using BCM2835 driver library by Mike McCauley, why reinvent the wheel!
-// http://www.airspayce.com/mikem/bcm2835/index.html
-// Include these in the source directory when using "halcompile --install rio.c"
-#include "bcm2835.h"
-#include "bcm2835.c"
-
 #include "rio.h"
 
+
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+
+#ifdef TRANSPORT_UDP
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#endif
+#ifdef TRANSPORT_USB
+#include <fcntl.h> 
+#include <string.h>
+#include <termios.h>
+#endif
+#ifdef TRANSPORT_SPI
+#include "bcm2835.h"
+#include "bcm2835.c"
+#endif
 
 #define MODNAME "rio"
 #define PREFIX "rio"
 
-MODULE_AUTHOR("Oliver Dippel");
+MODULE_AUTHOR("Oliver Dippel (based on Scott Alford AKA scotta)");
 MODULE_DESCRIPTION("Driver for RIO FPGA boards");
 MODULE_LICENSE("GPL v2");
 
 char *ctrl_type[JOINTS] = { "p" };
-RTAPI_MP_ARRAY_STRING(ctrl_type,JOINTS,"control type (pos or vel)");
+RTAPI_MP_ARRAY_STRING(ctrl_type, JOINTS, "control type (pos or vel)");
 
 /***********************************************************************
 *                STRUCTURES AND GLOBAL VARIABLES                       *
@@ -68,6 +80,7 @@ typedef struct {
     hal_float_t 	*pos_fb[JOINTS];			// pin: position feedback (position units)
     hal_s32_t		*count[JOINTS];				// pin: psition feedback (raw counts)
     hal_float_t 	pos_scale[JOINTS];			// param: steps per position unit
+    hal_float_t 	fb_scale[JOINTS];			// param: steps per position unit
     float 			freq[JOINTS];				// param: frequency command sent to PRU
     hal_float_t 	*freq_cmd[JOINTS];			// pin: frequency command monitoring, available in LinuxCNC
     hal_float_t 	maxvel[JOINTS];				// param: max velocity, (pos units/sec)
@@ -112,20 +125,88 @@ static int reset_gpio_pin = 25;				// RPI GPIO pin number used to force watchdog
 
 
 
+#ifdef TRANSPORT_UDP
+#define DST_PORT 2390
+#define SRC_PORT 2390
+#define SEND_TIMEOUT_US 10
+#define RECV_TIMEOUT_US 10
+#define READ_PCK_DELAY_NS 10000
+
+static int udpSocket;
+static int errCount;
+struct sockaddr_in dstAddr, srcAddr;
+struct hostent *server;
+static const char *dstAddress = UDP_IP;
+static int UDP_init(void);
+#endif
+
+
+#ifdef TRANSPORT_USB
+int serial_fd = -1;
+#endif
+
 /***********************************************************************
 *                  LOCAL FUNCTION DECLARATIONS                         *
 ************************************************************************/
 static int rt_bcm2835_init(void);
 
 static void update_freq(void *arg, long period);
-static void spi_write();
-static void spi_read();
-static void spi_transfer();
+static void rio_readwrite();
+static void rio_transfer();
 static CONTROL parse_ctrl_type(const char *ctrl);
 
 /***********************************************************************
 *                       INIT AND EXIT CODE                             *
 ************************************************************************/
+
+
+#ifdef TRANSPORT_USB
+
+int set_interface_attribs (int fd, int speed, int parity) {
+        struct termios tty;
+        if (tcgetattr (fd, &tty) != 0) {
+            rtapi_print("ERROR: can't setup usb: %s\n", strerror(errno));
+            return errno;
+        }
+        cfsetospeed (&tty, speed);
+        cfsetispeed (&tty, speed);
+        tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS8;     // 8-bit chars
+        tty.c_iflag &= ~IGNBRK;         // disable break processing
+        tty.c_lflag = 0;                // no signaling chars, no echo,
+        tty.c_oflag = 0;                // no remapping, no delays
+        tty.c_cc[VMIN]  = 0;            // read doesn't block
+        tty.c_cc[VTIME] = 5;            // 0.5 seconds read timeout
+        tty.c_iflag &= ~(IXON | IXOFF | IXANY); // shut off xon/xoff ctrl
+        tty.c_cflag |= (CLOCAL | CREAD);// ignore modem controls, enable reading
+        tty.c_cflag &= ~(PARENB | PARODD);      // shut off parity
+        tty.c_cflag |= parity;
+        tty.c_cflag &= ~CSTOPB;
+        tty.c_cflag &= ~CRTSCTS;
+
+        if (tcsetattr (fd, TCSANOW, &tty) != 0) {
+            rtapi_print("ERROR: can't setup usb: %s\n", strerror(errno));
+            return errno;
+        }
+        return 0;
+}
+
+int set_blocking (int fd, int should_block) {
+        struct termios tty;
+        memset (&tty, 0, sizeof tty);
+        if (tcgetattr (fd, &tty) != 0) {
+            rtapi_print("ERROR: can't setup usb: %s\n", strerror(errno));
+            return errno;
+        }
+        tty.c_cc[VMIN]  = should_block ? 1 : 0;
+        tty.c_cc[VTIME] = 5;            // 0.5 seconds read timeout
+        if (tcsetattr (fd, TCSANOW, &tty) != 0) {
+            rtapi_print("ERROR: can't setup usb: %s\n", strerror(errno));
+            return errno;
+        }
+}
+
+#endif
+
 
 int rtapi_app_main(void)
 {
@@ -159,6 +240,26 @@ int rtapi_app_main(void)
         return -1;
     }
 
+
+#ifdef TRANSPORT_UDP
+    // Initialize the UDP socket
+    if (UDP_init() < 0) {
+        rtapi_print_msg(RTAPI_MSG_ERR, "Error: The board is unreachable\n");
+        return -1;
+    }
+#endif
+
+#ifdef TRANSPORT_SERIAL
+    serial_fd = open (SERIAL_PORT, O_RDWR | O_NOCTTY | O_SYNC);
+    if (serial_fd < 0) {
+        rtapi_print_msg(RTAPI_MSG_ERR,"usb setup error\n");
+        return errno;
+    }
+    set_interface_attribs (serial_fd, SERIAL_SPEED, 0);
+    set_blocking (serial_fd, 100);
+#endif
+
+#ifdef TRANSPORT_SPI
     // Map the RPi BCM2835 peripherals - uses "rtapi_open_as_root" in place of "open"
     if (!rt_bcm2835_init()) {
         rtapi_print_msg(RTAPI_MSG_ERR,"rt_bcm2835_init failed. Are you running with root privlages??\n");
@@ -173,31 +274,16 @@ int rtapi_app_main(void)
     }
 
     // Configure SPI0
-    bcm2835_spi_setBitOrder(BCM2835_SPI_BIT_ORDER_MSBFIRST);      // The default
-    bcm2835_spi_setDataMode(BCM2835_SPI_MODE0);                   // The default
-
-    //bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_256);		// 3.125MHz on RPI3
-    bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_128);		// 3.125MHz on RPI3
-    //bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_64);		// 6.250MHz on RPI3
-    //bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_32);		// 12.5MHz on RPI3
-
-    bcm2835_spi_chipSelect(BCM2835_SPI_CS_NONE);                      // The default
-    //bcm2835_spi_setChipSelectPolarity(BCM2835_SPI_CS0, LOW);      // the default
-
-
-    /* RPI_GPIO_P1_19        = 10 		MOSI when SPI0 in use
-     * RPI_GPIO_P1_21        =  9 		MISO when SPI0 in use
-     * RPI_GPIO_P1_23        = 11 		CLK when SPI0 in use
-     * RPI_GPIO_P1_24        =  8 		CE0 when SPI0 in use
-     * RPI_GPIO_P1_26        =  7 		CE1 when SPI0 in use
-     */
-
-    // Configure pullups on SPI0 pins - source termination and CS high (does this allows for higher clock frequencies??? wiring is more important here)
+    bcm2835_spi_setBitOrder(BCM2835_SPI_BIT_ORDER_MSBFIRST);
+    bcm2835_spi_setDataMode(BCM2835_SPI_MODE0);
+    bcm2835_spi_setClockDivider(SPI_SPEED);
+    bcm2835_spi_chipSelect(BCM2835_SPI_CS_NONE);
     bcm2835_gpio_set_pud(RPI_GPIO_P1_19, BCM2835_GPIO_PUD_DOWN);	// MOSI
     bcm2835_gpio_set_pud(RPI_GPIO_P1_21, BCM2835_GPIO_PUD_DOWN);	// MISO
     bcm2835_gpio_set_pud(RPI_GPIO_P1_24, BCM2835_GPIO_PUD_UP);		// CS0
 
-    // export spiPRU SPI enable and status bits
+#endif
+
     retval = hal_pin_bit_newf(HAL_IN, &(data->SPIenable),
                               comp_id, "%s.SPI-enable", prefix);
     if (retval != 0) goto error;
@@ -252,6 +338,11 @@ int rtapi_app_main(void)
                                       comp_id, "%s.joint.%01d.scale", prefix, n);
         if (retval < 0) goto error;
         data->pos_scale[n] = 1.0;
+
+        retval = hal_param_float_newf(HAL_RW, &(data->fb_scale[n]),
+                                      comp_id, "%s.joint.%01d.fb-scale", prefix, n);
+        if (retval < 0) goto error;
+        data->fb_scale[n] = 0.0;
 
         retval = hal_pin_s32_newf(HAL_OUT, &(data->count[n]),
                                   comp_id, "%s.joint.%01d.counts", prefix, n);
@@ -322,9 +413,6 @@ error:
     }
 
 
-
-
-
     // Export functions
     rtapi_snprintf(name, sizeof(name), "%s.update-freq", prefix);
     retval = hal_export_funct(name, update_freq, data, 1, 0, comp_id);
@@ -335,18 +423,8 @@ error:
         return -1;
     }
 
-    rtapi_snprintf(name, sizeof(name), "%s.write", prefix);
-    /* no FP operations */
-    retval = hal_export_funct(name, spi_write, 0, 0, 0, comp_id);
-    if (retval < 0) {
-        rtapi_print_msg(RTAPI_MSG_ERR,
-                        "%s: ERROR: write function export failed\n", modname);
-        hal_exit(comp_id);
-        return -1;
-    }
-
-    rtapi_snprintf(name, sizeof(name), "%s.read", prefix);
-    retval = hal_export_funct(name, spi_read, data, 1, 0, comp_id);
+    rtapi_snprintf(name, sizeof(name), "%s.readwrite", prefix);
+    retval = hal_export_funct(name, rio_readwrite, data, 1, 0, comp_id);
     if (retval < 0) {
         rtapi_print_msg(RTAPI_MSG_ERR,
                         "%s: ERROR: read function export failed\n", modname);
@@ -373,6 +451,66 @@ void rtapi_app_exit(void)
 // This is the same as the standard bcm2835 library except for the use of
 // "rtapi_open_as_root" in place of "open"
 
+#ifdef TRANSPORT_UDP
+int UDP_init(void)
+{
+    int ret;
+
+    // Create a UDP socket
+    udpSocket = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (udpSocket < 0) {
+        rtapi_print("ERROR: can't open socket: %s\n", strerror(errno));
+        return -errno;
+    }
+
+    bzero((char*) &dstAddr, sizeof(dstAddr));
+    dstAddr.sin_family = AF_INET;
+    dstAddr.sin_addr.s_addr = inet_addr(dstAddress);
+    dstAddr.sin_port = htons(DST_PORT);
+
+    bzero((char*) &srcAddr, sizeof(srcAddr));
+    srcAddr.sin_family = AF_INET;
+    srcAddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    srcAddr.sin_port = htons(SRC_PORT);
+
+    // bind the local socket to SCR_PORT
+    ret = bind(udpSocket, (struct sockaddr *) &srcAddr, sizeof(srcAddr));
+    if (ret < 0) {
+        rtapi_print("ERROR: can't bind: %s\n", strerror(errno));
+        return -errno;
+    }
+
+    // Connect to send and receive only to the server_addr
+    ret = connect(udpSocket, (struct sockaddr*) &dstAddr, sizeof(struct sockaddr_in));
+    if (ret < 0) {
+        rtapi_print("ERROR: can't connect: %s\n", strerror(errno));
+        return -errno;
+    }
+
+    struct timeval timeout;
+    timeout.tv_sec = 0;
+    timeout.tv_usec = RECV_TIMEOUT_US;
+
+    ret = setsockopt(udpSocket, SOL_SOCKET, SO_RCVTIMEO, (char*) &timeout, sizeof(timeout));
+    if (ret < 0) {
+        rtapi_print("ERROR: can't set receive timeout socket option: %s\n", strerror(errno));
+        return -errno;
+    }
+
+    timeout.tv_usec = SEND_TIMEOUT_US;
+    ret = setsockopt(udpSocket, SOL_SOCKET, SO_SNDTIMEO, (char*) &timeout,
+                     sizeof(timeout));
+    if (ret < 0) {
+        rtapi_print("ERROR: can't set send timeout socket option: %s\n", strerror(errno));
+        return -errno;
+    }
+
+    return 0;
+}
+
+#endif
+
+#ifdef TRANSPORT_SPI
 int rt_bcm2835_init(void)
 {
     int  memfd;
@@ -507,6 +645,8 @@ exit:
 
     return ok;
 }
+
+#endif
 
 void update_freq(void *arg, long period)
 {
@@ -649,9 +789,7 @@ void update_freq(void *arg, long period)
 
         }
         else {
-
             /* VELOCITY CONTROL MODE */
-
             // calculate velocity command in counts/sec
             vel_cmd = *(data->vel_cmd[i]);
         }
@@ -693,7 +831,7 @@ void update_freq(void *arg, long period)
 }
 
 
-void spi_read()
+void rio_readwrite()
 {
     int i = 0;
     int bi = 0;
@@ -714,8 +852,57 @@ void spi_read()
         if( (*(data->SPIreset) && !(data->SPIresetOld)) || *(data->SPIstatus) ) {
             // reset rising edge detected, try SPI transfer and reset OR PRU running
 
-            // Transfer to and from the PRU
-            spi_transfer();
+
+            int i = 0;
+            int bi = 0;
+
+            // Data header
+            txData.header = PRU_WRITE;
+
+
+            // Joint frequency commands
+            for (i = 0; i < JOINTS; i++) {
+                if (joints_type[i] == JOINT_PWMDIR) {
+                    txData.jointFreqCmd[i] = data->freq[i];
+                } else {
+                    txData.jointFreqCmd[i] = PRU_OSC / data->freq[i];
+                }
+            }
+
+
+            for (bi = 0; bi < JOINT_ENABLE_BYTES; bi++) {
+                txData.jointEnable[bi] = 0;
+                for (i = 0; i < JOINTS; i++) {
+                    if (*(data->stepperEnable[bi * 8 + i]) == 1) {
+                        txData.jointEnable[bi] |= (1 << i);
+                    }
+                }
+            }
+
+            // Set points
+            for (i = 0; i < VARIABLE_OUTPUTS; i++) {
+                if (vout_type[i] == VOUT_TYPE_SINE) {
+                    txData.setPoint[i] = PRU_OSC / *(data->setPoint[i]) / vout_freq[i];
+                } else if (vout_type[i] == VOUT_TYPE_PWM) {
+                    txData.setPoint[i] = *(data->setPoint[i]) * (PRU_OSC / vout_freq[i]) / 100;
+                } else if (vout_type[i] == VOUT_TYPE_RCSERVO) {
+                    txData.setPoint[i] = (*(data->setPoint[i]) + 200 + 100) * (PRU_OSC / 200000);
+                } else {
+                    txData.setPoint[i] = (*(data->setPoint[i]) - vout_min[i]) * (0xFFFFFFFF / 2) / (vout_max[i] - vout_min[i]);
+                }
+            }
+
+            // Outputs
+            for (bi = 0; bi < DIGITAL_OUTPUT_BYTES; bi++) {
+                txData.outputs[bi] = 0;
+                for (i = 0; i < 8; i++) {
+                    if (*(data->outputs[bi * 8 + i]) == 1) {
+                        txData.outputs[bi] |= (1 << i);		// output is high
+                    }
+                }
+            }
+
+            rio_transfer();
 
             switch (rxData.header) {	// only process valid SPI payloads. This rejects bad payloads
             case PRU_DATA:
@@ -723,10 +910,12 @@ void spi_read()
                 *(data->SPIstatus) = 1;
 
                 for (i = 0; i < JOINTS; i++) {
-                    rxData.jointFeedback[i] /= joints_fb_scale[i];
+                    if (data->fb_scale[i] == 0.0) {
+                        data->fb_scale[i] = data->pos_scale[i];
+                    }
 
                     if (joints_fb_type[i] == JOINT_FB_ABS) {
-                        *(data->pos_fb[i]) = (float)(rxData.jointFeedback[i]) / data->pos_scale[i];
+                        *(data->pos_fb[i]) = (float)(rxData.jointFeedback[i]) / data->fb_scale[i];
                     }
                     else {
                         accum_diff = rxData.jointFeedback[i] - old_count[i];
@@ -736,11 +925,11 @@ void spi_read()
 
                         *(data->count[i]) = accum[i];
 
-                        data->scale_recip[i] = data->pos_scale[i];
+                        data->scale_recip[i] = data->fb_scale[i];
 
                         curr_pos = (double)(accum[i]);
 
-                        *(data->pos_fb[i]) = (float)((curr_pos+0.5) / data->pos_scale[i]);
+                        *(data->pos_fb[i]) = (float)((curr_pos+0.5) / data->fb_scale[i]);
                     }
 
                 }
@@ -792,68 +981,46 @@ void spi_read()
 }
 
 
-void spi_write()
+void rio_transfer()
 {
-    int i = 0;
-    int bi = 0;
 
-    // Data header
-    txData.header = PRU_WRITE;
+#ifdef TRANSPORT_UDP
+    int ret;
+    long long t1, t2;
 
+    // Send datagram
+    ret = send(udpSocket, txData.txBuffer, SPIBUFSIZE, 0);
 
-    // Joint frequency commands
-    for (i = 0; i < JOINTS; i++) {
-        txData.jointFreqCmd[i] = PRU_OSC / data->freq[i];
+    // Receive incoming datagram
+    t1 = rtapi_get_time();
+    do {
+        ret = recv(udpSocket, rxData.rxBuffer, SPIBUFSIZE, 0);
+        if(ret < 0) rtapi_delay(READ_PCK_DELAY_NS);
+        t2 = rtapi_get_time();
+    }
+    while ((ret < 0) && ((t2 - t1) < 200*1000*1000));
+
+    if (ret > 0) {
+        errCount = 0;
+    }
+    else {
+        errCount++;
     }
 
-
-    for (bi = 0; bi < JOINT_ENABLE_BYTES; bi++) {
-        txData.jointEnable[bi] = 0;
-        for (i = 0; i < JOINTS; i++) {
-            if (*(data->stepperEnable[bi * 8 + i]) == 1) {
-                txData.jointEnable[bi] |= (1 << i);
-            }
-        }
+    if (errCount > 2) {
+        *(data->SPIstatus) = 0;
+        rtapi_print("Ethernet ERROR: %s\n", strerror(errno));
     }
+#endif
 
-    // Set points
-    for (i = 0; i < VARIABLE_OUTPUTS; i++) {
-        if (vout_type[i] == VOUT_TYPE_SINE) {
-            txData.setPoint[i] = PRU_OSC / *(data->setPoint[i]) / vout_freq[i];
-        }
-        else if (vout_type[i] == VOUT_TYPE_PWM) {
-            txData.setPoint[i] = *(data->setPoint[i]) * (PRU_OSC / vout_freq[i]) / 100;
-        }
-        else if (vout_type[i] == VOUT_TYPE_RCSERVO) {
-            txData.setPoint[i] = (*(data->setPoint[i]) + 200 + 100) * (PRU_OSC / 200000);
-        }
-        else {
-            txData.setPoint[i] = (*(data->setPoint[i]) - vout_min[i]) * (0xFFFFFFFF / 2) / (vout_max[i] - vout_min[i]);
-        }
-    }
+#ifdef TRANSPORT_USB
 
-    // Outputs
-    for (bi = 0; bi < DIGITAL_OUTPUT_BYTES; bi++) {
-        txData.outputs[bi] = 0;
-        for (i = 0; i < 8; i++) {
-            if (*(data->outputs[bi * 8 + i]) == 1) {
-                txData.outputs[bi] |= (1 << i);		// output is high
-            }
-        }
-    }
+    write (serial_fd, txData.txBuffer, SPIBUFSIZE);
+    read(serial_fd, rxData.rxBuffer, SPIBUFSIZE);
 
-    if( *(data->SPIstatus) ) {
-        // Transfer to and from the PRU
-        spi_transfer();
-    }
+#endif
 
-}
-
-
-void spi_transfer()
-{
-    // send and receive data to and from the RIO concurrently
-
+#ifdef TRANSPORT_SPI
     int i;
 
     bcm2835_gpio_fsel(RPI_GPIO_P1_26, BCM2835_GPIO_FSEL_OUTP);
@@ -862,8 +1029,8 @@ void spi_transfer()
     for (i = 0; i < SPIBUFSIZE; i++) {
         rxData.rxBuffer[i] = bcm2835_spi_transfer(txData.txBuffer[i]);
     }
-
     bcm2835_gpio_write(RPI_GPIO_P1_26, HIGH);
+#endif
 
 }
 

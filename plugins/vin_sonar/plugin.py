@@ -31,6 +31,15 @@ class Plugin:
                 pinlist_out.append((f"VIN{num}_SONAR_ECHO", vin["pin_echo"], "INPUT", pullup))
         return pinlist_out
 
+
+    def variables(self):
+        variables = []
+        for num, vin in enumerate(self.jdata.get("vin", [])):
+            if vin["type"] == "sonar":
+                variables.append({"dir": "IN", "type": "VARIABLE", "calc": "linear", "size": 32, "vin": num})
+        return variables
+
+
     def vins(self):
         vins_out = 0
         for _num, vin in enumerate(self.jdata.get("vin", [])):

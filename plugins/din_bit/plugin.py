@@ -64,6 +64,13 @@ class Plugin:
             pinlist_out.append((f"DIN{num}", din["pin"], "INPUT", pullup))
         return pinlist_out
 
+    def variables(self):
+        variables = []
+        for num, din in enumerate(self.jdata["din"]):
+            variables.append({"dir": "IN", "type": "BIT", "size": 1, "din": num})
+
+        return variables
+
     def dins(self):
         dins_out = 0
         for _num, _din in enumerate(self.jdata["din"]):

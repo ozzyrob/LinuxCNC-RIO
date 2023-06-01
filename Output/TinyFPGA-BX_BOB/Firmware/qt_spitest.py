@@ -1,19 +1,32 @@
 
 import time
-import spidev
 from struct import *
 import sys
 from PyQt5.QtWidgets import QWidget,QPushButton,QApplication,QListWidget,QGridLayout,QLabel,QSlider,QCheckBox
 from PyQt5.QtCore import QTimer,QDateTime, Qt
 
+SERIAL = ''
+NET_IP = ''
+if len(sys.argv) > 1 and sys.argv[1].startswith('/dev/tty'):
+    import serial
+    SERIAL = '/dev/ttyUSB0'
+    ser = serial.Serial(SERIAL, 2000000, timeout=1)
+elif len(sys.argv) > 1 and sys.argv[1] != '':
+    NET_IP = sys.argv[1]
+    NET_PORT = 2390
+    print('IP:', NET_IP)
+    import socket
+else:
+    import spidev
+    bus = 0
+    device = 1
+    spi = spidev.SpiDev()
+    spi.open(bus, device)
+    spi.max_speed_hz = 4000000
+    spi.mode = 0
+    spi.lsbfirst = False
+
 INTERVAL = 100
-bus = 0
-device = 1
-spi = spidev.SpiDev()
-spi.open(bus, device)
-spi.max_speed_hz = 4000000
-spi.mode = 0
-spi.lsbfirst = False
 
 data = [0] * 30
 data[0] = 0x74
@@ -57,6 +70,10 @@ vout_types = [
     'pwm',
 ]
 
+vin_types = [
+    'frequency',
+]
+
 voutminmax = [
     (0, 100, 'pwm', 10000),
 ]
@@ -75,6 +92,9 @@ class WinForm(QWidget):
         layout=QGridLayout()
         self.widgets = {}
         self.animation = 0
+        self.doutcounter = 0
+        self.error_counter_spi = 0
+        self.error_counter_net = 0
 
         COLS = max(JOINTS, DOUTS, VOUTS, DINS, VINS)
 
@@ -140,6 +160,8 @@ class WinForm(QWidget):
                 self.widgets[key] = QCheckBox()
                 self.widgets[key].setChecked(False)
                 layout.addWidget(self.widgets[key], gpy, dbyte * 8 + dn + 3)
+                if dbyte * 8 + dn == DOUTS - 1:
+                    break
         gpy += 1
 
         layout.addWidget(QLabel(f'JOINTS:'), gpy, 0)
@@ -151,6 +173,12 @@ class WinForm(QWidget):
         gpy += 1
 
         layout.addWidget(QLabel(f'VARIABLE:'), gpy, 0)
+        layout.addWidget(QLabel(f'IN'), gpy, 1)
+        for vn in range(VINS):
+            layout.addWidget(QLabel(vin_types[vn]), gpy, vn + 3)
+        gpy += 1
+
+        #layout.addWidget(QLabel(f'VARIABLE:'), gpy, 0)
         layout.addWidget(QLabel(f'IN'), gpy, 1)
         for vn in range(VINS):
             key = f'vi{vn}'
@@ -165,6 +193,21 @@ class WinForm(QWidget):
                 key = f'dic{dbyte}{dn}'
                 self.widgets[key] = QLabel("0")
                 layout.addWidget(self.widgets[key], gpy, dbyte * 8 + dn + 3)
+                if dbyte * 8 + dn == DINS - 1:
+                    break
+        gpy += 1
+
+        layout.addWidget(QLabel(''), gpy, 0)
+        gpy += 1
+
+        layout.addWidget(QLabel(f'ERRORS:'), gpy, 0)
+        layout.addWidget(QLabel(f'SPI:'), gpy, 1)
+        self.widgets["errors_spi"] = QLabel("0")
+        layout.addWidget(self.widgets["errors_spi"], gpy, 2)
+
+        layout.addWidget(QLabel(f'NET:'), gpy, 3)
+        self.widgets["errors_net"] = QLabel("0")
+        layout.addWidget(self.widgets["errors_net"], gpy, 4)
         gpy += 1
 
         self.setLayout(layout)
@@ -197,18 +240,22 @@ class WinForm(QWidget):
                 self.widgets[key].setText(str(vouts[vn]))
 
             if self.widgets["dout_auto"].isChecked():
-                timer = int(time.time() * 50)
                 for dbyte in range(DIGITAL_OUTPUT_BYTES):
                     for dn in range(8):
                         key = f"doc{dbyte}{dn}"
-
-                        #stat = (timer & (dn+1) == 0)
-                        stat = ((self.animation // 50) == dbyte * 8 + dn)
-                        self.animation += 1
-                        if self.animation // 50 > DOUTS:
-                            self.animation = 0
-
+                        stat = (self.animation - 1) == dbyte * 8 + dn
                         self.widgets[key].setChecked(stat)
+                        if dbyte * 8 + dn == DOUTS - 1:
+                            break
+
+                if self.doutcounter > 10:
+                    self.doutcounter = 0
+                    if self.animation >= DOUTS:
+                        self.animation = 0
+                    else:
+                        self.animation += 1
+                else:
+                    self.doutcounter += 1
 
             douts = []
             for dbyte in range(DIGITAL_OUTPUT_BYTES):
@@ -217,6 +264,8 @@ class WinForm(QWidget):
                     key = f"doc{dbyte}{dn}"
                     if self.widgets[key].isChecked():
                         douts[dbyte] |= (1<<(dn))
+                    if dbyte * 8 + dn == DOUTS - 1:
+                        break
 
 
             bn = 4
@@ -273,12 +322,23 @@ class WinForm(QWidget):
                 data[bn] = douts[dbyte]
                 bn += 1
 
-
             print("tx:", data)
-            rec = spi.xfer2(data)
+            start = time.time()
+            if NET_IP:
+                UDPClientSocket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
+                UDPClientSocket.sendto(bytes(data), (NET_IP, NET_PORT))
+                UDPClientSocket.settimeout(0.2)
+                msgFromServer = UDPClientSocket.recvfrom(len(data))
+                rec = list(msgFromServer[0])
+            elif SERIAL:
+                ser.write(bytes(data))
+                msgFromServer = ser.read(len(data))
+                rec = list(msgFromServer)
+            else:
+                rec = spi.xfer2(data)
+
+            print(f"Duration: {(time.time() - start):0.5f}")
             print("rx:", rec)
-
-
 
             jointFeedback = [0] * JOINTS
             processVariable = [0] * VINS
@@ -308,13 +368,12 @@ class WinForm(QWidget):
                     print(f' Var({num}): {processVariable[num]}')
                 #print(f'inputs {inputs:08b}')
             else:
-                print(f'Header: 0x{header:x}')
-
+                print(f'ERROR: Unknown Header: 0x{header:x}')
+                self.error_counter_spi += 1
 
             for jn, value in enumerate(joints):
                 key = f"jf{jn}"
                 self.widgets[key].setText(str(jointFeedback[jn]))
-
 
             for vn in range(VINS):
                 key = f"vi{vn}"
@@ -334,7 +393,6 @@ class WinForm(QWidget):
                         value = 1000 / PRU_OSC / 20 * value * 343.2
                 self.widgets[key].setText(f"{round(value, 2)}{unit}")
 
-
             for dbyte in range(DIGITAL_INPUT_BYTES):
                 for dn in range(8):
                     key = f"dic{dbyte}{dn}"
@@ -349,9 +407,15 @@ class WinForm(QWidget):
                     else:
                         self.widgets[key].setStyleSheet("background-color: yellow")
 
+                    if dbyte * 8 + dn == DINS - 1:
+                        break
 
         except Exception as e:
             print("ERROR", e)
+            self.error_counter_net += 1
+
+        self.widgets["errors_spi"].setText(str(self.error_counter_spi))
+        self.widgets["errors_net"].setText(str(self.error_counter_net))
 
 
 if __name__ == '__main__':

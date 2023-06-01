@@ -139,5 +139,122 @@ def generate(project):
     rio_data.append("")
     open(f"{project['LINUXCNC_PATH']}/Components/rio.h", "w").write("\n".join(rio_data))
 
+
+
+
+    rio_data = []
+
+    rio_data.append("""
+enum {
+    OUTTYPE_JOINT_VEL,
+    OUTTYPE_JOINT_ENABLE,
+    OUTTYPE_VARIABLE,
+    OUTTYPE_BIT,
+};
+
+enum {
+    INTYPE_JOINT_FB,
+    INTYPE_VARIABLE,
+    INTYPE_BIT,
+};
+""")
+    rio_data.append("")
+
+    rio_data.append(f"#define BUFFERSIZE {(32 + project['total_inout']) // 8}")
+    rio_data.append("")
+    for vsize in project["variables_out"]:
+        rio_data.append(f"#define OUTPUTS_{vsize}BIT {len(project['variables_out'][vsize])}")
+    for vsize in project["variables_in"]:
+        rio_data.append(f"#define INPUTS_{vsize}BIT  {len(project['variables_in'][vsize])}")
+    rio_data.append(f"#define OUTPUTS_BITMASK {project['onebit_out']}")
+    rio_data.append(f"#define INPUTS_BITMASK  {project['onebit_in']}")
+    rio_data.append("")
+
+    output_types = []
+    for outp in project["variables_out"].get(32, []):
+        output_types.append(f"{outp.get('dir')}TYPE_{outp.get('type')}")
+
+    input_types = []
+    for inp in project["variables_in"].get(32, []):
+        input_types.append(f"{inp.get('dir')}TYPE_{inp.get('type')}")
+
+    output_variable_joints = []
+    for outp in project["variables_out"].get(32, []):
+        output_variable_joints.append(f"{outp.get('joint', -1)}")
+
+    input_variable_joints = []
+    for inp in project["variables_in"].get(32, []):
+        input_variable_joints.append(f"{inp.get('joint', -1)}")
+
+    output_bittypes = []
+    for outp in project["variables_out"].get(1, []):
+        output_bittypes.append(f"{outp.get('dir')}TYPE_{outp.get('type')}")
+
+    input_bittypes = []
+    for inp in project["variables_in"].get(1, []):
+        input_bittypes.append(f"{inp.get('dir')}TYPE_{inp.get('type')}")
+
+    output_bit_joints = []
+    for outp in project["variables_out"].get(1, []):
+        output_bit_joints.append(f"{outp.get('joint', -1)}")
+
+    input_bit_joints = []
+    for inp in project["variables_in"].get(1, []):
+        input_bit_joints.append(f"{inp.get('joint', -1)}")
+
+    rio_data.append(f"uint8_t out_variable_types[] = {{{', '.join(output_types)}}};")
+    rio_data.append(f"uint8_t in_variable_types[] = {{{', '.join(input_types)}}};")
+    rio_data.append(f"uint8_t out_bit_types[] = {{{', '.join(output_bittypes)}}};")
+    rio_data.append(f"uint8_t in_bit_types[] = {{{', '.join(input_bittypes)}}};")
+    rio_data.append("")
+
+    rio_data.append(f"int8_t out_variable_joints[] = {{{', '.join(output_variable_joints)}}};")
+    rio_data.append(f"int8_t in_variable_joints[] = {{{', '.join(input_variable_joints)}}};")
+    rio_data.append(f"int8_t out_bit_joints[] = {{{', '.join(output_bit_joints)}}};")
+    rio_data.append(f"int8_t in_bit_joints[] = {{{', '.join(input_bit_joints)}}};")
+    rio_data.append("")
+
+
+    rio_data.append("""
+typedef union {
+    struct {
+        uint8_t txBuffer[BUFFERSIZE];
+    };
+    struct {
+        int32_t header;""")
+
+    if len(project["variables_out"].get(32)) > 0:
+        rio_data.append(f"        int32_t out_variables[OUTPUTS_32BIT];")
+    if project["onebit_out"] > 0:
+        rio_data.append(f"        uint8_t out_bitmasks[OUTPUTS_BITMASK];")
+
+    rio_data.append("""    };
+} txData_t;
+""")
+
+
+    rio_data.append("""
+typedef union {
+    struct {
+        uint8_t rxBuffer[BUFFERSIZE];
+    };
+    struct {
+        int32_t header;""")
+
+    if len(project["variables_in"].get(32)) > 0:
+        rio_data.append(f"        int32_t in_variables[INPUTS_32BIT];")
+    if project["onebit_in"] > 0:
+        rio_data.append(f"        uint8_t in_bitmasks[INPUTS_BITMASK];")
+
+    rio_data.append("""    };
+} rxData_t;
+""")
+
+
+    rio_data.append("")
+    open(f"{project['LINUXCNC_PATH']}/Components/_new_rio.h", "w").write("\n".join(rio_data))
+
+
+
     os.system(f"cp -a generators/linuxcnc_component/*.c {project['LINUXCNC_PATH']}/Components/")
     os.system(f"cp -a generators/linuxcnc_component/*.h {project['LINUXCNC_PATH']}/Components/")

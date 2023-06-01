@@ -50,6 +50,18 @@ class Plugin:
     def types(self):
         return ["stepper", ]
 
+    def variables(self):
+        variables = []
+        for num, joint in enumerate(self.jdata["joints"]):
+            if joint["type"] == "stepper":
+                variables.append({"dir": "OUT", "type": "JOINT_VEL", "calc": "stepper", "size": 32, "joint": num})
+                if not joint.get("cl____"):
+                    variables.append({"dir": "IN", "type": "JOINT_FB", "calc": "stepper", "size": 32, "joint": num})
+                variables.append({"dir": "OUT", "type": "JOINT_ENABLE", "size": 1, "joint": num})
+
+        return variables
+
+
     def entry_info(self, joint):
         info = ""
         if joint.get("type") == "stepper":

@@ -84,6 +84,35 @@ if double_pins:
     exit(1)
     
 
+project["variables"] = []
+for plugin in project["plugins"]:
+    if hasattr(project["plugins"][plugin], "variables"):
+        for variable in project["plugins"][plugin].variables():
+            variable['plugin'] = plugin
+            project["variables"].append(variable)
+
+project["variables_in"] = {}
+project["variables_out"] = {}
+for variable in project["variables"]:
+    vdir = variable.get("dir")
+    vsize = variable.get("size")
+    if vdir == "OUT":
+        if vsize not in project["variables_out"]:
+            project["variables_out"][vsize] = []
+        project["variables_out"][vsize].append(variable)
+    else:
+        if vsize not in project["variables_in"]:
+            project["variables_in"][vsize] = []
+        project["variables_in"][vsize].append(variable)
+
+project["onebit_out"] = (len(project["variables_out"].get(1, [])) + 7) // 8
+project["onebit_in"]  = (len(project["variables_in"].get(1, [])) + 7) // 8
+project["total_out"] = project["onebit_out"] * 8 + len(project["variables_out"].get(32, [])) * 32
+project["total_in"] = project["onebit_in"] * 8 + len(project["variables_in"].get(32, [])) * 32
+project["total_inout"] = max(project["total_out"], project["total_in"])
+
+
+
 project["dins"] = 0
 for plugin in project["plugins"]:
     if hasattr(project["plugins"][plugin], "dins"):

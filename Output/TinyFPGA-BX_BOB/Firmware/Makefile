@@ -5,8 +5,8 @@ PACKAGE := cm81
 
 all: rio.bin
 
-rio.json: interface_spislave.v vout_pwm.v quad_encoder.v joint_stepper.v joint_stepper_nf.v vin_frequency.v debouncer.v pll.v rio.v
-	yosys -q -l yosys.log -p 'synth_${FAMILY} -top rio -json rio.json' interface_spislave.v vout_pwm.v quad_encoder.v joint_stepper.v joint_stepper_nf.v vin_frequency.v debouncer.v pll.v rio.v
+rio.json: vin_frequency.v vout_pwm.v quad_encoder.v joint_stepper.v joint_stepper_nf.v interface_spislave.v debouncer.v pll.v rio.v
+	yosys -q -l yosys.log -p 'synth_${FAMILY} -top rio -json rio.json' vin_frequency.v vout_pwm.v quad_encoder.v joint_stepper.v joint_stepper_nf.v interface_spislave.v debouncer.v pll.v rio.v
 
 rio.asc: rio.json pins.pcf
 	nextpnr-${FAMILY} -q -l nextpnr.log --${TYPE} --package ${PACKAGE} --json rio.json --pcf pins.pcf --asc rio.asc
@@ -22,6 +22,9 @@ check:
 
 clean:
 	rm -rf rio.bin rio.asc rio.json yosys.log nextpnr.log
+
+sim: vin_frequency.v vout_pwm.v quad_encoder.v joint_stepper.v joint_stepper_nf.v interface_spislave.v debouncer.v pll.v rio.v
+	verilator --cc --exe --build -j 0 -Wall --top-module rio sim_main.cpp vin_frequency.v vout_pwm.v quad_encoder.v joint_stepper.v joint_stepper_nf.v interface_spislave.v debouncer.v pll.v rio.v
 
 tinyprog: rio.bin
 	tinyprog -p rio.bin

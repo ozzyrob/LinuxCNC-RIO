@@ -14,6 +14,7 @@ def generate(project):
             top_arguments.append(f"{pin[2].lower()} {pin[0]}")
 
     top_data = []
+    top_data_new = []
     top_data.append("/*")
     top_data.append(f"    ######### {project['jdata']['name']} #########")
     top_data.append("*/")
@@ -135,6 +136,80 @@ def generate(project):
     for num in range(project['joints']):
         top_data.append(f"    wire signed [31:0] jointFeedback{num};")
     top_data.append("")
+
+
+    # rx_data - new style interface
+    output_size = project["total_out"] + 32
+    input_size = project["total_in"] + 32
+    size_diff = output_size - input_size
+    total_size = project["total_inout"] + 32
+    pos = total_size
+    top_data_new.append("")
+    top_data_new.append(f"    // rx_data {output_size}/{total_size}")
+    top_data_new.append(f"    assign header_rx = {{rx_data[{pos-3*8-1}:{pos-3*8-8}], rx_data[{pos-2*8-1}:{pos-2*8-8}], rx_data[{pos-1*8-1}:{pos-1*8-8}], rx_data[{pos-1}:{pos-8}]}};")
+    pos -= 32
+    for outp in project["variables_out"].get(32, []):
+        if outp["type"] == "VARIABLE":
+            vout = outp["vout"]
+            vname = f"setPoint{vout}"
+            top_data_new.append(
+                f"    assign {vname} = {{rx_data[{pos-3*8-1}:{pos-3*8-8}], rx_data[{pos-2*8-1}:{pos-2*8-8}], rx_data[{pos-1*8-1}:{pos-1*8-8}], rx_data[{pos-1}:{pos-8}]}};"
+            )
+            pos -= 32
+        elif outp["type"] == "JOINT_VEL":
+            joint = outp["joint"]
+            vname = f"jointFreqCmd{joint}"
+            top_data_new.append(
+                f"    assign {vname} = {{rx_data[{pos-3*8-1}:{pos-3*8-8}], rx_data[{pos-2*8-1}:{pos-2*8-8}], rx_data[{pos-1*8-1}:{pos-1*8-8}], rx_data[{pos-1}:{pos-8}]}};"
+            )
+            pos -= 32
+    out_bits = len(project["variables_out"].get(1, []))
+    out_bits_fill = project["onebit_out"] * 8 - out_bits
+    pos -= out_bits_fill
+    for outp in reversed(project["variables_out"].get(1, [])):
+        if outp["type"] == "JOINT_ENABLE":
+            joint = outp["joint"]
+            vname = f"jointEnable{joint}"
+            top_data_new.append(f"    assign {vname} = rx_data[{pos-1}];")
+            pos -= 1
+        else:
+            print(outp)
+            dout = outp["dout"]
+            vname = f"DOUT{dout}"
+            top_data_new.append(f"    assign {vname} = rx_data[{pos-1}];")
+            pos -= 1
+    top_data_new.append("")
+
+    # tx_data - new style interface
+    top_data_new.append(f"    // tx_data {input_size}/{total_size}")
+    top_data_new.append("    assign tx_data = {")
+    top_data_new.append("        header_tx[7:0], header_tx[15:8], header_tx[23:16], header_tx[31:24],")
+    for inp in project["variables_in"].get(32, []):
+        if inp["type"] == "VARIABLE":
+            vout = inp["vin"]
+            vname = f"processVariable{vout}"
+            top_data_new.append(f"        {vname}[7:0], {vname}[15:8], {vname}[23:16], {vname}[31:24],")
+        elif inp["type"] == "JOINT_FB":
+            joint = inp["joint"]
+            vname = f"jointFeedback{joint}"
+            top_data_new.append(f"        {vname}[7:0], {vname}[15:8], {vname}[23:16], {vname}[31:24],")
+    in_bits = len(project["variables_in"].get(1, []))
+    in_bits_fill = project["onebit_in"] * 8 - in_bits
+    if in_bits_fill > 0:
+        top_data_new.append(f"        {in_bits_fill}'d0,")
+    for inp in reversed(project["variables_in"].get(1, [])):
+        din = inp['din']
+        top_data_new.append(f"        DIN{din},")
+    if size_diff > 0:
+        top_data_new.append(f"        {size_diff}'d0,")
+    top_data_new[-1] = top_data_new[-1].rstrip(",")
+    top_data_new.append("    };")
+    top_data_new.append("")
+    top_data_new.append("")
+
+
+
+
 
 
     top_data.append(f"    // rx_data {project['rx_data_size']}")
@@ -278,6 +353,10 @@ def generate(project):
     top_data.append("endmodule")
     top_data.append("")
     open(f"{project['SOURCE_PATH']}/rio.v", "w").write("\n".join(top_data))
+
+    open(f"{project['SOURCE_PATH']}/_new_rio.v", "w").write("\n".join(top_data_new))
+
+
     project['verilog_files'].append("rio.v")
     board = project['jdata'].get("board")
 

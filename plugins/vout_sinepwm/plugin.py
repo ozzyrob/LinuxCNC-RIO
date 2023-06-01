@@ -27,12 +27,23 @@ class Plugin:
                     pinlist_out.append((f"VOUT{num}_SINEPWM", vout["pin"], "OUTPUT"))
         return pinlist_out
 
+
+
+    def variables(self):
+        variables = []
+        for num, vout in enumerate(self.jdata["vout"]):
+            if vout["type"] == "sine":
+                variables.append({"dir": "OUT", "type": "VARIABLE", "calc": "frequency", "size": 32, "vout": num})
+        return variables
+
+
     def vouts(self):
         vouts_out = 0
         for _num, vout in enumerate(self.jdata["vout"]):
             if vout["type"] == "sine":
                 vouts_out += 1
         return vouts_out
+
 
     def funcs(self):
         func_out = ["    // vout_sinepwm's"]

@@ -39,6 +39,14 @@ class Plugin:
         return info
 
 
+    def variables(self):
+        variables = []
+        for num, vin in enumerate(self.jdata.get("vin", [])):
+            if vin["type"] == "frequency":
+                variables.append({"dir": "IN", "type": "VARIABLE", "calc": "frequency", "size": 32, "vin": num})
+        return variables
+
+
     def pinlist(self):
         pinlist_out = []
         for num, vin in enumerate(self.jdata.get("vin", [])):

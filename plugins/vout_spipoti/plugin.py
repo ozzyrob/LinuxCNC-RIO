@@ -52,6 +52,14 @@ class Plugin:
                 pinlist_out.append((f"VOUT{num}_SPIPOTI_CS", vout["pins"]["CS"], "OUTPUT"))
         return pinlist_out
 
+    def variables(self):
+        variables = []
+        for num, vout in enumerate(self.jdata["vout"]):
+            if vout["type"] == "spipoti":
+                variables.append({"dir": "OUT", "type": "VARIABLE", "calc": "linear", "size": 32, "vout": num})
+        return variables
+
+
     def vouts(self):
         vouts_out = 0
         for _num, vout in enumerate(self.jdata["vout"]):

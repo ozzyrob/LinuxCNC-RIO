@@ -75,6 +75,15 @@
                 "updown": "T3",
                 "incr": "R4"
             }
+        },
+        {
+            "type": "udpoti",
+            "resolution": "100",
+            "speed": "100000",
+            "pins": {
+                "updown": "EXPANSION0_OUTPUT[5]",
+                "incr": "EXPANSION0_OUTPUT[6]"
+            }
         }
     ],
     "joints": [

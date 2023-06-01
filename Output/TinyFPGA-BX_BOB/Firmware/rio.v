@@ -130,19 +130,18 @@ module rio (
 
     // expansion I/O's
 
-    // vin_quadencoder's
+    // vin_pulsecounter's
 
-    // interface_spislave
-    interface_spislave #(BUFFER_SIZE, 32'h74697277, 48000000) spi1 (
+    // vin_frequency's
+    vin_frequency #(4800000) vin_frequency0 (
         .clk (sysclk),
-        .SPI_SCK (INTERFACE_SPI_SCK),
-        .SPI_SSEL (INTERFACE_SPI_SSEL),
-        .SPI_MOSI (INTERFACE_SPI_MOSI),
-        .SPI_MISO (INTERFACE_SPI_MISO),
-        .rx_data (rx_data),
-        .tx_data (tx_data),
-        .pkg_timeout (INTERFACE_TIMEOUT)
+        .frequency (processVariable0),
+        .SIGNAL (VIN0_FREQUENCY)
     );
+
+    // vin_sonar's
+
+    // vout_sinepwm's
 
     // expansion_shiftreg's
 
@@ -158,13 +157,13 @@ module rio (
         .pwm (VOUT0_PWM_PWM_INVERTED)
     );
 
-    // vin_pulsecounter's
-
-    // vout_frequency's
-
-    // joint_pwmdir's
-
     // vin_pwmcounter's
+
+    // vin_quadencoder's
+
+    // vout_spipoti's
+
+    // vout_udpoti's
 
     // joint_stepper's
     joint_stepper joint_stepper0 (
@@ -212,19 +211,24 @@ module rio (
         .STP (JOINT4_STEPPER_STP)
     );
 
-    // vin_sonar's
-
-    // vout_udpoti's
-
-    // vin_frequency's
-    vin_frequency #(48000000) vin_frequency0 (
-        .clk (sysclk),
-        .frequency (processVariable0),
-        .SIGNAL (VIN0_FREQUENCY)
-    );
-
     // joint_rcservo's
 
-    // vout_sinepwm's
+    // vin_ad7705's
+
+    // vout_frequency's
+
+    // interface_spislave
+    interface_spislave #(BUFFER_SIZE, 32'h74697277, 48000000) spi1 (
+        .clk (sysclk),
+        .SPI_SCK (INTERFACE_SPI_SCK),
+        .SPI_SSEL (INTERFACE_SPI_SSEL),
+        .SPI_MOSI (INTERFACE_SPI_MOSI),
+        .SPI_MISO (INTERFACE_SPI_MISO),
+        .rx_data (rx_data),
+        .tx_data (tx_data),
+        .pkg_timeout (INTERFACE_TIMEOUT)
+    );
+
+    // joint_pwmdir's
 
 endmodule
