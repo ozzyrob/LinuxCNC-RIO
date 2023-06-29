@@ -1,0 +1,168 @@
+{
+    "name": "Olimex-ICE40HX8K-EVB_8-out-18-in",
+    "description": "Olimex-ICE40HX8K-EVB with 2xcustom BoB",
+    "toolchain": "icestorm",
+    "family": "ice40",
+    "type": "hx8k",
+    "package": "ct256",
+    "clock": {
+        "speed": "100000000",
+        "pin": "J3"
+    },
+    "interface": [
+        {
+            "type": "spi",
+            "pins": {
+                "MOSI": "P12",
+                "MISO": "P11",
+                "SCK": "R11",
+                "SEL": "L11"
+            }
+        }
+    ],
+    "error": {
+        "comment": "GPIO1 Pin 10",        
+        "pin": "J2"
+    },
+    "enable": {
+        "comment": "GPIO1 Pin 5",
+        "pin": "E4"
+    },
+    "blink":{
+        "comment": "LED1 PIO2_42",
+        "pin":"M12"
+    },
+    "dout": [
+        {
+            "comment": "DOUT.00 Board 1 DB-08",
+            "pin": "H2"
+        },
+         {
+            "comment": "DOUT.01 Board 1 DB-09",
+            "pin": "C1"
+        }
+   ],
+    "din": [
+        {
+            "comment": "DIN.00 Board 1 DB-10 X-Limit",
+            "pullup": true,
+            "pin": "J4"
+        },
+        {
+            "comment": "DIN.01 Board 1 DB-11 X-Home",
+            "pullup": true,
+            "pin": "C2"
+        },
+        {
+            "comment": "DIN.02 Board 1 DB-12 Z-Limit",
+            "pullup": true,
+            "pin": "G2"
+        },
+        {
+            "comment": "DIN.03 Board 1 DB-13 Z-Home",
+            "pullup": true,
+            "pin": "F4"
+        },
+        {
+            "comment": "DIN.04 Board 1 DB-15 E-STOP",
+            "pullup": true,
+            "pin": "D2"
+        },
+        
+         {
+            "comment": "DIN.05 Board 2 DB-06 MPG-SELECT 1",
+            "pullup": true,
+            "pin": "H6"
+        },
+         {
+            "comment": "DIN.06 Board 2 DB-07 MPG-SELECT 2",
+            "pullup": true,
+            "pin": "G4"
+        },
+         {
+            "comment": "DIN.07 Board 2 DB-08 MPG-SELECT 3",
+            "pullup": true,
+            "pin": "F2"
+        },
+         {
+            "comment": "DIN.08 Board 2 DB-09 MPG-ENABLE",
+            "pullup": true,
+            "pin": "E3"
+        },
+        
+         {
+            "comment": "DIN.09 Board 2 DB-10 X+ Jog",
+            "pullup": true,
+            "pin": "H3"
+        },
+
+        {
+            "comment": "DIN.10 Board 2 DB-11 X- Jog",
+            "pullup": true,
+            "pin": "H5"
+        },
+        {
+            "comment": "DIN.11 Board 2 DB-12 Z+ Jog",
+            "pullup": true,
+            "pin": "F3"
+        },
+        {
+            "comment": "DIN.12 Board 2 DB-13 Z- Jog",
+            "pullup": true,
+            "pin": "E2"
+        },
+        {
+            "comment": "DIN.13 Board 2 DB-15 Select CONT-STEP Jog",
+            "pullup": true,
+            "pin": "G3"
+        }       
+    ],
+    "vout": [
+        {
+            "comment": "Spindle PMW Board 1 DB-06 DB-07",
+            "type": "pwm",
+            "frequency": "5000",
+            "min": "0",
+            "max": "+10",
+            "pin": "J5",
+            "dir": "B1"
+        }
+    ],
+    "vin": [
+        {
+            "comment": "PV.00 X Axis MPG Boadr 2 DB-02 DB-03",
+            "type": "mpgencoder",
+            "pullup": true,
+            "pin_a": "H4",
+            "pin_b": "G5"
+        },
+        {
+            "comment": "PV.01 Z Axis MPG Board 2 DB-04 DB-05",
+            "type": "mpgencoder",
+            "pullup": true,
+            "pin_a": "F1",
+            "pin_b": "D1"
+        }
+       
+    ],
+    "joints": [
+        {
+            "comment": "X Axis Board 1 DB-02 DB-03",
+            "type": "stepper",
+            "cl": false,
+            "pins": {
+                "step": "H1",
+                "dir": "B2"
+            }
+        },
+        {
+            "comment": "Z Axis Board 1 DB-04 DB-05",
+            "type": "stepper",
+            "cl": false,
+            "pins": {
+                "step": "G1",
+                "dir": "F5"
+            }
+        }
+    ]
+}

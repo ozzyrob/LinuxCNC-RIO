@@ -1,0 +1,78 @@
+component lathe_pendant "2 Axis Lathe Pendnant";
+description "2 Axis (2 of MPG & 1 of DP4T switch) pendant inspired by the mpg component of Kurt Jacobson.";
+
+
+//MPG Pendant
+// Sumary of rio pins used
+// Encoder X rio.PV.00 Board 2 DB-02 DB-03
+// Encoder Z rio.PV.01 Board 2 DB-04 DB-05
+// MPG Enable Board 2 DB-06 ENABLE MPG	rio.din.06
+// Board 2 DB-07 MPG-SELECT 0.100		rio.din.07
+// Board 2 DB-08 MPG-SELECT 0.010		rio.din.08
+// Board 2 DB-09 MPG-SELECT 0.001		rio.din.09
+
+pin in bit mpg_enable;
+
+pin in bit scale_select_1;
+pin in bit scale_select_2;
+pin in bit scale_select_3; 
+
+pin in s32 X_encoder_counts;
+pin in s32 Z_encoder_counts;
+
+param rw float mpg_scale1=0.100;
+param rw float mpg_scale2=0.010;
+param rw float mpg_scale3=0.0025;
+
+//Enable;
+pin out bit mpg_X_enable;
+pin out bit mpg_Z_enable;
+
+//MPG Scale
+pin out float mpg_X_scale;
+pin out float mpg_Z_scale;
+
+//Encoder Counts;
+pin out s32 mpg_X_counts;
+pin out s32 mpg_Z_counts;
+
+function _;
+license "GPL"; // indicates GPL v2 or later
+;;
+
+FUNCTION(_){
+
+	if ( mpg_enable) {	
+	
+		mpg_X_enable = 1;
+		mpg_Z_enable = 1;
+
+				
+		if ( scale_select_3 && !scale_select_2 && !scale_select_1 ) {
+				mpg_X_scale = mpg_scale3; 
+				mpg_Z_scale = mpg_scale3;
+				}
+			else if ( !scale_select_3 && scale_select_2 && !scale_select_1  ) {
+				mpg_X_scale = mpg_scale2; 
+				mpg_Z_scale = mpg_scale2;
+				}		
+			else if ( !scale_select_3 && !scale_select_2 && scale_select_1  ) {
+				mpg_X_scale = mpg_scale1; 
+				mpg_Z_scale = mpg_scale1;
+				}
+// 2 or more select bits high
+			else {
+				//mpg_X_scale = 0; 
+				//mpg_Z_scale = 0;
+				}	
+			}	
+
+// Enable bit low
+	else {
+			mpg_X_enable = 0;
+			mpg_Z_enable = 0;
+		}
+	
+	mpg_X_counts = X_encoder_counts;
+	mpg_Z_counts = Z_encoder_counts;
+}

@@ -1,0 +1,39 @@
+
+# load the realtime components
+loadrt [KINS]KINEMATICS
+loadrt [EMCMOT]EMCMOT base_period_nsec=[EMCMOT]BASE_PERIOD servo_period_nsec=[EMCMOT]SERVO_PERIOD num_joints=[KINS]JOINTS
+
+loadrt rio ctrl_type=p,p
+
+# estop loopback, SPI comms enable and feedback
+net user-enable-out 	<= iocontrol.0.user-enable-out		=> rio.SPI-enable
+net user-request-enable <= iocontrol.0.user-request-enable	=> rio.SPI-reset
+net rio-status 	<= rio.SPI-status 			=> iocontrol.0.emc-enable-in
+
+# add the rio and motion functions to threads
+addf motion-command-handler servo-thread
+addf motion-controller servo-thread
+addf rio.update-freq servo-thread
+addf rio.readwrite servo-thread
+
+    
+
+# Joint 0 setup
+
+setp rio.joint.00.scale 		[JOINT_0]SCALE
+setp rio.joint.00.maxaccel 	[JOINT_0]STEPGEN_MAXACCEL
+
+net xpos-cmd 		<= joint.0.motor-pos-cmd 	=> rio.joint.00.pos-cmd  
+net j0pos-fb 		<= rio.joint.00.pos-fb 	=> joint.0.motor-pos-fb
+net j0enable 		<= joint.0.amp-enable-out 	=> rio.joint.00.enable
+
+
+# Joint 1 setup
+
+setp rio.joint.01.scale 		[JOINT_1]SCALE
+setp rio.joint.01.maxaccel 	[JOINT_1]STEPGEN_MAXACCEL
+
+net zpos-cmd 		<= joint.1.motor-pos-cmd 	=> rio.joint.01.pos-cmd  
+net j1pos-fb 		<= rio.joint.01.pos-fb 	=> joint.1.motor-pos-fb
+net j1enable 		<= joint.1.amp-enable-out 	=> rio.joint.01.enable
+

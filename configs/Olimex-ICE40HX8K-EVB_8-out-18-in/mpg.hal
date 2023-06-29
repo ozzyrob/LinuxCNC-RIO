@@ -1,0 +1,88 @@
+#  Dual axis lathe pendant
+#  in lathe-pendant.0.X-encoder-counts
+#  in lathe-pendant.0.Z-encoder-counts
+#  out lathe-pendant.0.mpg-X-counts
+#  out lathe-pendant.0.mpg-X-enable
+#  out lathe-pendant.0.mpg-X-scale
+#  out lathe-pendant.0.mpg-Z-counts
+#  out lathe-pendant.0.mpg-Z-enable
+#  out lathe-pendant.0.mpg-Z-scale
+#  in lathe-pendant.0.mpg-enable
+#  in lathe-pendant.0.scale-select-1
+#  in lathe-pendant.0.scale-select-2
+#  in lathe-pendant.0.scale-select-3
+#  param lathe-pendant.0.mpg-scale1 0.1000
+#  param lathe-pendant.0.mpg-scale2 0.0100
+#  param lathe-pendant.0.mpg-scale3 0.0025
+
+# MPG Pendant
+# Sumary of rio pins used
+# Encoder X rio.PV.00 Board 2 DB-02 DB-03
+# Encoder Z rio.PV.01 Board 2 DB-04 DB-05
+# MPG Enable Board 2 DB-06 ENABLE MPG	rio.din.08-not
+# Board 2 DB-07 MPG-SELECT 0.100		rio.din.05-not
+# Board 2 DB-08 MPG-SELECT 0.010		rio.din.06-not
+# Board 2 DB-09 MPG-SELECT 0.001		rio.din.07-not
+
+# Load comp & add to servo thread
+loadrt lathe_pendant
+addf lathe-pendant.0 servo-thread
+
+# Setup scale values
+setp lathe-pendant.0.mpg-scale1 1.000
+setp lathe-pendant.0.mpg-scale2 0.100
+setp lathe-pendant.0.mpg-scale3 0.010
+
+# Connect component inputs
+net x_counts_in rio.PV.00
+net x_counts_in lathe-pendant.0.X-encoder-counts
+
+net z_counts_in rio.PV.01
+net z_counts_in lathe-pendant.0.Z-encoder-counts
+
+net enable_in rio.din.08-not
+net enable_in lathe-pendant.0.mpg-enable
+
+net scale_select_1_in rio.din.05-not
+net scale_select_1_in lathe-pendant.0.scale-select-1
+net scale_select_2_in rio.din.06-not
+net scale_select_2_in lathe-pendant.0.scale-select-2
+net scale_select_3_in rio.din.07-not
+net scale_select_3_in lathe-pendant.0.scale-select-3
+
+
+
+
+# 
+net x_enable_out lathe-pendant.0.mpg-X-enable
+net z_enable_out lathe-pendant.0.mpg-Z-enable
+net x_scale_out lathe-pendant.0.mpg-X-scale
+net z_scale_out lathe-pendant.0.mpg-Z-scale
+net x_counts_out lathe-pendant.0.mpg-X-counts
+net z_counts_out lathe-pendant.0.mpg-Z-counts
+
+# Enables
+# Axis Enable
+net x_enable_out axis.x.jog-enable
+net z_enable_out axis.z.jog-enable
+# Joint Enable
+net x_enable_out joint.0.jog-enable 
+net z_enable_out joint.1.jog-enable
+
+# Scales
+# Axis Scale
+net x_scale_out axis.x.jog-scale
+net z_scale_out axis.z.jog-scale
+# Joint Scale
+net x_scale_out joint.0.jog-scale
+net z_scale_out joint.1.jog-scale
+
+
+# Counts
+# Axis Counts
+net x_counts_out axis.x.jog-counts
+net z_counts_out axis.z.jog-counts
+# Joint Counts
+net x_counts_out joint.0.jog-counts
+net z_counts_out joint.1.jog-counts
+
