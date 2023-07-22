@@ -119,6 +119,12 @@ for plugin in project["plugins"]:
         if hasattr(project["plugins"][plugin], "doutnames"):
             project["doutnames"] += project["plugins"][plugin].doutnames()
 
+
+project["jointtypes"] = []
+for joint in project['jdata']['joints']:
+    project["jointtypes"].append(joint['type'])
+
+
 project["vouts"] = 0
 for plugin in project["plugins"]:
     if hasattr(project["plugins"][plugin], "vouts"):
@@ -162,17 +168,19 @@ project[
     "OUTPUT_PATH"
 ] = f"Output/{project['jdata']['name'].replace(' ', '_').replace('/', '_')}"
 project["FIRMWARE_PATH"] = f"{project['OUTPUT_PATH']}/Firmware"
-project["DOC_PATH"] = f"{project['OUTPUT_PATH']}/doc"
 project["SOURCE_PATH"] = f"{project['FIRMWARE_PATH']}"
 project["PINS_PATH"] = f"{project['FIRMWARE_PATH']}"
 project["LINUXCNC_PATH"] = f"{project['OUTPUT_PATH']}/LinuxCNC"
-os.system(f"mkdir -p {project['DOC_PATH']}")
 os.system(f"mkdir -p {project['OUTPUT_PATH']}")
 os.system(f"mkdir -p {project['SOURCE_PATH']}")
 os.system(f"mkdir -p {project['PINS_PATH']}")
 os.system(f"mkdir -p {project['LINUXCNC_PATH']}")
 os.system(f"mkdir -p {project['LINUXCNC_PATH']}/Components/")
 os.system(f"mkdir -p {project['LINUXCNC_PATH']}/ConfigSamples/rio")
+os.system(f"mkdir -p {project['LINUXCNC_PATH']}/ConfigSamples/rio/subroutines")
+os.system(f"mkdir -p {project['LINUXCNC_PATH']}/ConfigSamples/rio/m_codes")
+os.system(f"cp -a files/subroutines/* {project['LINUXCNC_PATH']}/ConfigSamples/rio/subroutines")
+
 
 if project["jdata"]["toolchain"] == "diamond":
     project["SOURCE_PATH"] = f"{project['FIRMWARE_PATH']}/impl1/source"
@@ -186,7 +194,7 @@ for plugin in project["plugins"]:
         for ipv in project["plugins"][plugin].ips():
             project["verilog_files"].append(ipv)
             # os.system(f"verilator --lint-only -Wall plugins/{plugin}/{ipv}")
-            os.system(f"verilator --lint-only plugins/{plugin}/{ipv}")
+            os.system(f"which verilator >/dev/null && verilator --lint-only plugins/{plugin}/{ipv}")
             os.system(f"cp -a plugins/{plugin}/{ipv} {project['SOURCE_PATH']}/{ipv}")
 
 print(f"generating files in {project['OUTPUT_PATH']}")

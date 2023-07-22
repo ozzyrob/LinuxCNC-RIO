@@ -175,7 +175,12 @@ def generate(project):
 
     if "enable" in project['jdata']:
         jointEnablesStr = " || ".join(jointEnables)
-        top_data.append(f"    assign ENA = ({jointEnablesStr}) && ~ERROR;")
+        if project['jdata']["enable"].get("invert", False):
+            top_data.append(f"    wire ENA_INV;")
+            top_data.append(f"    assign ENA = ~ENA_INV;")
+            top_data.append(f"    assign ENA_INV = ({jointEnablesStr}) && ~ERROR;")
+        else:
+            top_data.append(f"    assign ENA = ({jointEnablesStr}) && ~ERROR;")
         top_data.append("")
 
 
@@ -260,13 +265,13 @@ def generate(project):
 
     tdins = []
 
-
+    ldin = len(project['jdata']["din"])
     for dbyte in range(project['dins_total'] // 8):
         for num in range(8):
             bitnum = num + (dbyte * 8)
             if bitnum < project['dins']:
                 dname = project['dinnames'][bitnum]
-                if bitnum in project['jdata']["din"] and project['jdata']["din"][bitnum].get("invert", False):
+                if bitnum < ldin and project['jdata']["din"][bitnum].get("invert", False):
                     tdins.append(f"~{dname}")
                 else:
                     tdins.append(f"{dname}")
@@ -403,13 +408,16 @@ def generate(project):
         makefile_data.append("")
         makefile_data.append("rio_pnr.json: rio.json")
         makefile_data.append(f"	nextpnr-gowin --seed 0 --json rio.json --write rio_pnr.json --freq {float(project['jdata']['clock']['speed']) / 1000000} --enable-globals --enable-auto-longwires --device ${{DEVICE}} --family ${{FAMILY}} --cst pins.cst")
-        #makefile_data.append(f"	nextpnr-gowin --seed 0 --ignore-loops --ignore-rel-clk --no-tmdriv --json rio.json --write rio_pnr.json --freq {float(project['jdata']['clock']['speed']) / 1000000} --device ${{DEVICE}} --family ${{FAMILY}} --cst pins.cst")
         makefile_data.append("")
         makefile_data.append("rio.fs: rio_pnr.json")
         makefile_data.append("	gowin_pack -d ${FAMILY} -o rio.fs rio_pnr.json")
         makefile_data.append("")
         makefile_data.append("load: rio.fs")
         makefile_data.append("	openFPGALoader -b tangnano9k rio.fs -f")
+        makefile_data.append("")
+        makefile_data.append("")
+        makefile_data.append("clean:")
+        makefile_data.append("	rm -rf rio.fs rio.json rio_pnr.json")
         makefile_data.append("")
         makefile_data.append("testb:")
         makefile_data.append(f"	iverilog -Wall -o testb.out testb.v {verilogs}")

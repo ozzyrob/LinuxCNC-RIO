@@ -2,9 +2,42 @@
 
 based on WT32-ETH01
 
-Helpfull: https://github.com/ldijkman/WT32-ETH01-LAN-8720-RJ45-
+## Install Firmware:
+
+Needed: FTDI or other USB2Serial adapter
+
+please install platformio on you system and run:
+
+```
+pio run
+pio run --target upload
+```
+
+if you want a static IP, please edit src/main.ino
+```
+    // setup static ip
+    IPAddress myIP(192, 168, 10, 132);
+    IPAddress myGW(192, 168, 10, 1);
+    IPAddress mySN(255, 255, 255, 0);
+    ETH.config(myIP, myGW, mySN);
+```
+
+
 
 ## Pinout:
+
+### FTDI-Programmer:
+
+to enter programming mode, connect IO0 to GND before switching on the power supply
+
+| FTDI Pin | WT32-ETH01 Pin |
+| --- | --- |
+| RX (IO1) | TX0 |
+| TX (IO3) | RX0 |
+| GND | GND |
+| VCC | 5V |
+
+### FPGA (SPI):
 
 | Signal | Pin |
 | --- | --- |
@@ -14,3 +47,19 @@ Helpfull: https://github.com/ldijkman/WT32-ETH01-LAN-8720-RJ45-
 | CS | 4 |
 
 Please use this pinout for the SPI, all other combinations have problems if the FPGA is connected at boottime or while flashing
+
+![Pinout](pinout.jpg?raw=true "Pinout")
+
+![jumperwires](wt32-eth01-jumperwires.jpg?raw=true "jumperwires")
+
+
+## Case:
+
+a small case for the board
+
+[wt32eth0-case.stl](wt32eth0-case.stl)
+
+[wt32eth0-case.scad](wt32eth0-case.scad)
+
+![CAse](wt32eth0-case.jpg?raw=true "Case")
+

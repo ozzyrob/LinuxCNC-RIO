@@ -96,9 +96,12 @@ typedef struct {
     float			cmd_d[JOINTS];					// command derivative
     hal_float_t 	*setPoint[VARIABLE_OUTPUTS];
     hal_float_t 	*processVariable[VARIABLE_INPUTS];
+    hal_s32_t 	    *processVariableS32[VARIABLE_INPUTS];
     hal_bit_t   	*outputs[DIGITAL_OUTPUT_BYTES * 8];
     hal_bit_t   	*inputs[DIGITAL_INPUT_BYTES * 8 * 2]; // for not pins * 2
+#ifdef INDEX_MAX
     hal_bit_t   	*index_enable[INDEX_MAX];
+#endif
 } data_t;
 
 static data_t *data;
@@ -108,7 +111,9 @@ static rxData_t rxData;
 
 
 /* other globals */
+#ifdef INDEX_MAX
 float index_enable_in[INDEX_MAX] = {0.0};
+#endif
 static int 			comp_id;				// component ID
 static const char 	*modname = MODNAME;
 static const char 	*prefix = PREFIX;
@@ -380,10 +385,17 @@ int rtapi_app_main(void)
     }
 
     for (n = 0; n < VARIABLE_INPUTS; n++) {
-        retval = hal_pin_float_newf(HAL_OUT, &(data->processVariable[n]),
-                                    comp_id, "%s.PV.%01d", prefix, n);
+		retval = hal_pin_float_newf(HAL_OUT, &(data->processVariable[n]),
+									comp_id, "%s.PV.%01d", prefix, n);
         if (retval < 0) goto error;
         *(data->processVariable[n]) = 0.0;
+
+		retval = hal_pin_s32_newf(HAL_OUT, &(data->processVariableS32[n]),
+									comp_id, "%s.PV.%01d-s32", prefix, n);
+        if (retval < 0) goto error;
+        *(data->processVariableS32[n]) = 0;
+
+
     }
 
     int index_num = 0;
@@ -395,9 +407,11 @@ int rtapi_app_main(void)
                     if (retval != 0) goto error;
                     *(data->outputs[bn * 8 + n]) = 0;
                 } else {
+#ifdef INDEX_MAX
                     retval = hal_pin_bit_newf(HAL_IO, &(data->index_enable[index_num]), comp_id, "%s.%s", prefix, dout_names[bn * 8 + n]);
                     if (retval != 0) goto error;
                     index_num++;
+#endif
                 }
             }
         }
@@ -875,8 +889,22 @@ void rio_readwrite()
             for (i = 0; i < VARIABLE_OUTPUTS; i++) {
                 if (vout_type[i] == VOUT_TYPE_SINE) {
                     txData.setPoint[i] = PRU_OSC / *(data->setPoint[i]) / vout_freq[i];
+                } else if (vout_type[i] == VOUT_TYPE_PWMDIR) {
+                    if (*(data->setPoint[i]) > vout_max[i]) {
+                        *(data->setPoint[i]) = vout_max[i];
+                    }
+                    if (*(data->setPoint[i]) < -vout_max[i]) {
+                        *(data->setPoint[i]) = -vout_max[i];
+                    }
+                    txData.setPoint[i] = (*(data->setPoint[i])) * (PRU_OSC / vout_freq[i]) / (vout_max[i]);
                 } else if (vout_type[i] == VOUT_TYPE_PWM) {
-                    txData.setPoint[i] = *(data->setPoint[i]) * (PRU_OSC / vout_freq[i]) / 100;
+                    if (*(data->setPoint[i]) > vout_max[i]) {
+                        *(data->setPoint[i]) = vout_max[i];
+                    }
+                    if (*(data->setPoint[i]) < vout_min[i]) {
+                        *(data->setPoint[i]) = vout_min[i];
+                    }
+                    txData.setPoint[i] = (*(data->setPoint[i]) - vout_min[i]) * (PRU_OSC / vout_freq[i]) / (vout_max[i] - vout_min[i]);
                 } else if (vout_type[i] == VOUT_TYPE_RCSERVO) {
                     txData.setPoint[i] = (*(data->setPoint[i]) + 200 + 100) * (PRU_OSC / 200000);
                 } else {
@@ -896,10 +924,12 @@ void rio_readwrite()
                                 txData.outputs[byte_out] |= (1 << (7-i));		// output is high
                             }
                         } else {
+#ifdef INDEX_MAX
                             if (*(data->index_enable[index_num]) == 1) {
                                 txData.outputs[byte_out] |= (1 << (7-i));
                             }
                             index_num++;
+#endif
                         }
                     }
                 }
@@ -932,7 +962,22 @@ void rio_readwrite()
 
                 // Feedback
                 for (i = 0; i < VARIABLE_INPUTS; i++) {
-                    *(data->processVariable[i]) = rxData.processVariable[i];
+                    float value = rxData.processVariable[i];
+                    if (vin_type[i] == VIN_TYPE_FREQ) {
+                        if (value != 0) {
+                            value = (float)PRU_OSC / value;
+                        }
+                    } else if (vin_type[i] == VIN_TYPE_TIME) {
+                        if (value != 0) {
+                            value = 1000.0 / ((float)PRU_OSC / value);
+                        }
+                    } else if (vin_type[i] == VIN_TYPE_SONAR) {
+                        if (value != 0) {
+                            value = 1000.0 / (float)PRU_OSC / 20.0 * value * 343.2;
+                        }
+                    }
+                    *(data->processVariable[i]) = value;
+                    *(data->processVariableS32[i]) = (int)value;
                 }
 
                 // Inputs
@@ -953,6 +998,7 @@ void rio_readwrite()
                                 if ((rxData.inputs[bi] & (1 << (7-i))) != 0) {
                                     ibit = 1;
                                 }
+#ifdef INDEX_MAX
                                 if (ibit != index_enable_in[index_num]) {
                                     index_enable_in[index_num] = ibit;
                                     if (index_enable_in[index_num] == 0) {
@@ -960,6 +1006,7 @@ void rio_readwrite()
                                     }
                                 }
                                 index_num++;
+#endif
                             }
                         }
                     }

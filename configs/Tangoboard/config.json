@@ -1,0 +1,185 @@
+{
+    "name": "Tangoboard",
+    "description": "Tangoboard with TangNano9K over SPI",
+    "board": "TangNano9K",
+    "type": "GW1NR-LV9QN88PC6/I5",
+    "family": "GW1N-9C",
+    "toolchain": "icestorm",
+    "package": "",
+    "clock": {
+        "speed": "27000000",
+        "pin": "52"
+    },
+    "transport": "UDP",
+    "ip": "192.168.10.14",
+    "axis": 3,
+    "_gui": "qtdragon",
+    "interface": [
+        {
+            "type": "spi",
+            "pins": {
+                "MOSI": "48",
+                "MISO": "49",
+                "SCK": "31",
+                "SEL": "32"
+            }
+        }
+    ],
+    "blink": {
+        "pin": "10"
+    },
+    "error": {
+        "invert": true,
+        "pin": "11"
+    },
+    "enable": {
+        "invert": true,
+        "pin": "73"
+    },
+    "dout": [
+        {
+            "name": "spindle-enable",
+            "net": "spindle.0.on",
+            "invert": true,
+            "pin": "38"
+        },
+        {
+            "invert": true,
+            "pin": "37"
+        },
+        {
+            "invert": true,
+            "pin": "36"
+        },
+        {
+            "invert": true,
+            "pin": "39"
+        },
+        {
+            "invert": true,
+            "pin": "25"
+        }
+    ],
+    "din": [
+        {
+            "name": "home-x",
+            "net": "joint.0.home-sw-in",
+            "invert": true,
+            "pullup": true,
+            "pin": "26"
+        },
+        {
+            "name": "home-y",
+            "net": "joint.1.home-sw-in",
+            "invert": true,
+            "pullup": true,
+            "pin": "27"
+        },
+        {
+            "name": "home-z",
+            "net": "joint.2.home-sw-in",
+            "invert": true,
+            "pullup": true,
+            "pin": "28"
+        },
+        {
+            "name": "tool-probe",
+            "net": "motion.probe-input",
+            "invert": true,
+            "pullup": true,
+            "pin": "29"
+        },
+        {
+            "invert": true,
+            "pullup": true,
+            "pin": "53"
+        },
+        {
+            "invert": true,
+            "pullup": true,
+            "pin": "54"
+        },
+        {
+            "invert": true,
+            "pullup": true,
+            "pin": "55"
+        },
+        {
+            "invert": true,
+            "pullup": true,
+            "pin": "56"
+        }
+    ],
+    "vout": [
+        {
+            "name": "spindle-speed",
+            "net": "spindle.0.speed-out",
+            "min": "0",
+            "max": "10000",
+            "invert": true,
+            "type": "pwm",
+            "pin": "76"
+        },
+        {
+            "type": "pwm",
+            "invert": true,
+            "pin": "75",
+            "dir": "74"
+        }
+    ],
+    "vin": [
+        {
+            "type": "quadencoder",
+            "quadType": 2,
+            "function": "jogwheel",
+            "pullup": true,
+            "pin_a": "68",
+            "pin_b": "69"
+        }
+    ],
+    "joints": [
+        {
+            "type": "stepper",
+            "cl": false,
+            "scale": -800,
+            "pins": {
+                "step": "63",
+                "dir": "86"
+            }
+        },
+        {
+            "type": "stepper",
+            "cl": false,
+            "scale": -800,
+            "pins": {
+                "step": "85",
+                "dir": "84"
+            }
+        },
+        {
+            "type": "stepper",
+            "cl": false,
+            "scale": -1600,
+            "pins": {
+                "step": "83",
+                "dir": "82"
+            }
+        },
+        {
+            "type": "stepper",
+            "cl": false,
+            "pins": {
+                "step": "81",
+                "dir": "80"
+            }
+        },
+        {
+            "type": "stepper",
+            "cl": false,
+            "pins": {
+                "step": "79",
+                "dir": "77"
+            }
+        }
+    ]
+}

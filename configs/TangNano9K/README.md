@@ -4,6 +4,9 @@ https://wiki.sipeed.com/hardware/en/tang/Tang-Nano-9K/Nano-9K.html
 
 Install: see INSTALL.md
 
+## Known-Issues:
+* openFPGAloader will not work on Raspberry Pi, you have to use another host to flash the FPGA !
+
 
 ## BOB-Adapter SPI-Pins:
 
@@ -32,14 +35,14 @@ Install: see INSTALL.md
 | BOB-Adapter | FUNC | FPGA-Pin |
 | --- | --- | --- |
 | 1 | 5V | |
-| 2 | DIN6 | 79 |
-| 3 | DIN7 | 80 |
-| 4 | DIN8 | 81 |
-| 5 | DIN9 | 82 |
-| 6 | DIN10 | 83 |
-| 7 | DIN11 | 84 |
-| 8 | DIN12 | 85 |
-| 9 | DIN13 | 86 |
+| 2 | DIN5 | 79 |
+| 3 | DIN6 | 80 |
+| 4 | DIN7 | 81 |
+| 5 | DIN8 | 82 |
+| 6 | DIN9 | 83 |
+| 7 | DIN10 | 84 |
+| 8 | DIN11 | 85 |
+| 9 | DIN12 | 86 |
 | 10 | GND | |
 
 
@@ -56,14 +59,14 @@ Install: see INSTALL.md
 | P7 | DIR_Z | 35 |
 | P8 | STP_A | 40 |
 | P9 | DIR_A | 34 |
-| P10 | DIN1 | 33 |
-| P11 | DIN2 | 30 |
-| P12 | DIN3 | 29 |
-| P13 | DIN4 | 28 |
+| P10 | DIN0 | 33 |
+| P11 | DIN1 | 30 |
+| P12 | DIN2 | 29 |
+| P13 | DIN3 | 28 |
 | P14 | EN | 69 |
-| P15 | DIN5 | 68 |
+| P15 | DIN4 | 68 |
 | P16 | STP_B | 57 |
-| P17 | DIR_B | 56 |
+| P17 | DIR_B / Relais | 56 |
 
 
 ## Mapping: FPGA Onboard Components
@@ -82,5 +85,9 @@ Install: see INSTALL.md
 
 ![adapter-top](https://raw.githubusercontent.com/multigcs/LinuxCNC-RIO/main/configs/TangNano9K/tangnano9k-bob-adapter2-top.png)
 ![test](https://raw.githubusercontent.com/multigcs/LinuxCNC-RIO/main/configs/TangNano9K/bob9k.jpg)
+
+![sch](https://raw.githubusercontent.com/multigcs/LinuxCNC-RIO/main/configs/TangNano9K/tangnano9k-bob-adapter2.sch.png)
+![brd](https://raw.githubusercontent.com/multigcs/LinuxCNC-RIO/main/configs/TangNano9K/tangnano9k-bob-adapter2.brd.png)
+
 
 
