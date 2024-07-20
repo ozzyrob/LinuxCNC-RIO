@@ -1,4 +1,6 @@
 class Plugin:
+    ptype = "vin_pwm"
+
     def __init__(self, jdata):
         self.jdata = jdata
 
@@ -6,9 +8,21 @@ class Plugin:
         return [
             {
                 "basetype": "vin",
-                "subtype": "pwm",
+                "subtype": self.ptype,
                 "comment": "measures the puls-lenght of pwm-signals on the input-pin",
                 "options": {
+                    "name": {
+                        "type": "str",
+                        "name": "pin name",
+                        "comment": "the name of the pin",
+                        "default": "",
+                    },
+                    "net": {
+                        "type": "vtarget",
+                        "name": "net target",
+                        "comment": "the target net of the pin in the hal",
+                        "default": "",
+                    },
                     "pin": {
                         "type": "input",
                         "name": "input pin",
@@ -23,38 +37,56 @@ class Plugin:
             }
         ]
 
+    def calculation_vin(self, setup, value):
+        unit = "ms"
+        if value != 0:
+            value = 1000 / (int(self.jdata["clock"]["speed"]) / value)
+        return (value, unit)
+
+    def calculation_vin_c(self, setup):
+        return """
+    if (value != 0) {
+        value = 1000.0 / ((float)PRU_OSC / value);
+    }
+        """
+
     def pinlist(self):
         pinlist_out = []
-        for num, vin in enumerate(self.jdata.get("vin", [])):
-            if vin.get("type") == "pwm":
-                pullup = vin.get("pullup", False)
-                pinlist_out.append((f"VIN{num}_PWM", vin["pin"], "INPUT", pullup))
+        for num, data in enumerate(self.jdata["plugins"]):
+            if data.get("type") == self.ptype:
+                pullup = data.get("pullup", False)
+                pinlist_out.append((f"VIN{num}_PWM", data["pin"], "INPUT", pullup))
         return pinlist_out
 
-    def vins(self):
-        vins_out = 0
-        for _num, vin in enumerate(self.jdata.get("vin", [])):
-            if vin.get("type") == "pwm":
-                vins_out += 1
-        return vins_out
+    def vinnames(self):
+        ret = []
+        for num, data in enumerate(self.jdata["plugins"]):
+            if data.get("type") == self.ptype:
+                name = data.get("name", f"PV.{num}")
+                nameIntern = name.replace(".", "").replace("-", "_").upper()
+                data["_name"] = name
+                data["_prefix"] = nameIntern
+                ret.append(data)
+        return ret
 
     def funcs(self):
-        func_out = ["    // vin_pwmcounter's"]
-        for num, vin in enumerate(self.jdata.get("vin", [])):
-            if vin.get("type") == "pwm":
-                freq_min = int(vin.get("freq_min", 10))
+        func_out = []
+        for num, data in enumerate(self.jdata["plugins"]):
+            if data.get("type") == self.ptype:
+                name = data.get("name", f"PV.{num}")
+                nameIntern = name.replace(".", "").replace("-", "_").upper()
+                freq_min = int(data.get("freq_min", 10))
                 func_out.append(
                     f"    vin_pwmcounter #({int(self.jdata['clock']['speed']) // freq_min}) vin_pwmcounter{num} ("
                 )
                 func_out.append("        .clk (sysclk),")
-                func_out.append(f"        .frequency (processVariable{num}),")
+                func_out.append(f"        .frequency ({nameIntern}),")
                 func_out.append(f"        .SIGNAL (VIN{num}_PWM)")
                 func_out.append("    );")
-
         return func_out
 
     def ips(self):
-        for num, vin in enumerate(self.jdata["vin"]):
-            if vin["type"] in ["pwm"]:
+        for num, data in enumerate(self.jdata["plugins"]):
+            if data["type"] == self.ptype:
                 return ["vin_pwmcounter.v"]
         return []

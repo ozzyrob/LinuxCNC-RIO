@@ -4,7 +4,7 @@
 
 ```
 {
-    "type": "stepper",
+    "type": "joint_stepper",
     "cl": false,
     "pins": {
         "step": "B15",
@@ -18,7 +18,7 @@
 
 ```
 {
-    "type": "stepper",
+    "type": "joint_stepper",
     "cl": true,
     "pins": {
         "step": "B15",
@@ -36,7 +36,7 @@ you can also add a scale parameter to get a better sample config
 
 ```
 {
-    "type": "stepper",
+    "type": "joint_stepper",
     "cl": false,
     "scale": -800,
     "pins": {
@@ -70,4 +70,15 @@ SCALE = -800
 FERROR = 1.0
 MIN_FERROR = 0.5
 ```
+
+# joint_stepper_nf.v
+![graphviz](./joint_stepper_nf.svg)
+
+
+# joint_stepper.v
+![graphviz](./joint_stepper.svg)
+
+
+# quad_encoder.v
+![graphviz](./quad_encoder.svg)
 

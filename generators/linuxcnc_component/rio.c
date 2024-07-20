@@ -1,13 +1,13 @@
 /********************************************************************
 * Description:  rio.c
 *               This file, 'rio.c', is a HAL component that
-*               provides an SPI connection to a external FPGA-Board running RIO firmware.
+*               provides an SPI connection to a external FPGA-Board running RIO gateware.
 *
 *				Initially developed for RaspberryPi -> Arduino Due.
 *				Further developed for RaspberryPi -> Smoothieboard and clones (LPC1768).
 *
 * Author: Scott Alford
-* Modified by: Oliver Dippel
+* Modified by: Oliver Dippel and Jesse Schoch
 * License: GPL Version 2
 *
 *		Credit to GP Orcullo and PICnc V2 which originally inspired this
@@ -28,6 +28,7 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <unistd.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -43,14 +44,37 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #endif
-#ifdef TRANSPORT_USB
+#ifdef TRANSPORT_SERIAL
 #include <fcntl.h> 
-#include <string.h>
 #include <termios.h>
 #endif
 #ifdef TRANSPORT_SPI
 #include "bcm2835.h"
 #include "bcm2835.c"
+#endif
+#ifdef TRANSPORT_FTDI
+#include <ftdi.h>
+#include <usb.h>
+#include <stdio.h>
+#include <string.h>
+
+#define VENDOR 		0x0403
+#define PRODUCT 	0x6010
+#define CK  0x01 // AD0 SPI clock
+#define DO 	0x02 // AD1 SPI data out
+#define DI  0x04 // AD2 SPI data in
+#define CS  0x08 // AD3 SPI chip select
+#define L0  0x10 // AD4 GPIOL0
+#define L1  0x20 // AD5 GPIOL1
+#define L2  0x40 // AD6 GPIOL2
+#define L3  0x80 // AD7 GPIOL3
+
+static uint8_t outpins = CS | DO | CK;
+struct ftdi_context* ftdi;
+int spi_init(void);
+int spi_exit(void);
+int spi_rw_buffer(uint8_t* pBuffer, uint8_t* rxBuffer, int numBytes);
+
 #endif
 
 #define MODNAME "rio"
@@ -95,10 +119,15 @@ typedef struct {
     float			prev_cmd[JOINTS];
     float			cmd_d[JOINTS];					// command derivative
     hal_float_t 	*setPoint[VARIABLE_OUTPUTS];
+    hal_float_t 	*setPointOffset[VARIABLE_OUTPUTS];
+    hal_float_t 	*setPointScale[VARIABLE_OUTPUTS];
     hal_float_t 	*processVariable[VARIABLE_INPUTS];
     hal_s32_t 	    *processVariableS32[VARIABLE_INPUTS];
     hal_bit_t   	*outputs[DIGITAL_OUTPUT_BYTES * 8];
     hal_bit_t   	*inputs[DIGITAL_INPUT_BYTES * 8 * 2]; // for not pins * 2
+    hal_float_t 	*processVariableScale[VARIABLE_INPUTS];
+    hal_float_t 	*processVariableOffset[VARIABLE_INPUTS];
+    hal_float_t 	*processVariableExtra[VARIABLE_INPUTS][2];
 #ifdef INDEX_MAX
     hal_bit_t   	*index_enable[INDEX_MAX];
 #endif
@@ -108,6 +137,7 @@ static data_t *data;
 static txData_t txData;
 static rxData_t rxData;
 
+long stamp = 0;
 
 
 /* other globals */
@@ -148,7 +178,7 @@ static int UDP_init(void);
 #endif
 
 
-#ifdef TRANSPORT_USB
+#ifdef TRANSPORT_SERIAL
 int serial_fd = -1;
 #endif
 
@@ -167,7 +197,7 @@ static CONTROL parse_ctrl_type(const char *ctrl);
 ************************************************************************/
 
 
-#ifdef TRANSPORT_USB
+#ifdef TRANSPORT_SERIAL
 
 int set_interface_attribs (int fd, int speed, int parity) {
         struct termios tty;
@@ -182,7 +212,7 @@ int set_interface_attribs (int fd, int speed, int parity) {
         tty.c_lflag = 0;                // no signaling chars, no echo,
         tty.c_oflag = 0;                // no remapping, no delays
         tty.c_cc[VMIN]  = 0;            // read doesn't block
-        tty.c_cc[VTIME] = 5;            // 0.5 seconds read timeout
+        tty.c_cc[VTIME] = 0;            // 0.5 seconds read timeout
         tty.c_iflag &= ~(IXON | IXOFF | IXANY); // shut off xon/xoff ctrl
         tty.c_cflag |= (CLOCAL | CREAD);// ignore modem controls, enable reading
         tty.c_cflag &= ~(PARENB | PARODD);      // shut off parity
@@ -195,21 +225,6 @@ int set_interface_attribs (int fd, int speed, int parity) {
             return errno;
         }
         return 0;
-}
-
-int set_blocking (int fd, int should_block) {
-        struct termios tty;
-        memset (&tty, 0, sizeof tty);
-        if (tcgetattr (fd, &tty) != 0) {
-            rtapi_print("ERROR: can't setup usb: %s\n", strerror(errno));
-            return errno;
-        }
-        tty.c_cc[VMIN]  = should_block ? 1 : 0;
-        tty.c_cc[VTIME] = 5;            // 0.5 seconds read timeout
-        if (tcsetattr (fd, TCSANOW, &tty) != 0) {
-            rtapi_print("ERROR: can't setup usb: %s\n", strerror(errno));
-            return errno;
-        }
 }
 
 #endif
@@ -250,6 +265,7 @@ int rtapi_app_main(void)
 
 #ifdef TRANSPORT_UDP
     // Initialize the UDP socket
+    rtapi_print("Info: Initialize the UDP socket: %s\n", UDP_IP);
     if (UDP_init() < 0) {
         rtapi_print_msg(RTAPI_MSG_ERR, "Error: The board is unreachable\n");
         return -1;
@@ -257,16 +273,26 @@ int rtapi_app_main(void)
 #endif
 
 #ifdef TRANSPORT_SERIAL
+    rtapi_print("Info: Initialize serial connection: %s\n", SERIAL_PORT);
     serial_fd = open (SERIAL_PORT, O_RDWR | O_NOCTTY | O_SYNC);
     if (serial_fd < 0) {
         rtapi_print_msg(RTAPI_MSG_ERR,"usb setup error\n");
         return errno;
     }
     set_interface_attribs (serial_fd, SERIAL_SPEED, 0);
-    set_blocking (serial_fd, 100);
+
+    uint8_t rxBufferTmp[SPIBUFSIZE];
+    int cnt = 0;
+    int rec = 0;
+    while((rec = read(serial_fd, rxBufferTmp, SPIBUFSIZE)) <= SPIBUFSIZE && cnt++ < 190) {
+        usleep(100);
+    }
+
+
 #endif
 
 #ifdef TRANSPORT_SPI
+    rtapi_print("Info: Initialize SPI connection\n");
     // Map the RPi BCM2835 peripherals - uses "rtapi_open_as_root" in place of "open"
     if (!rt_bcm2835_init()) {
         rtapi_print_msg(RTAPI_MSG_ERR,"rt_bcm2835_init failed. Are you running with root privlages??\n");
@@ -281,14 +307,16 @@ int rtapi_app_main(void)
     }
 
     // Configure SPI0
+    // The defines are set in rio.h
     bcm2835_spi_setBitOrder(BCM2835_SPI_BIT_ORDER_MSBFIRST);
     bcm2835_spi_setDataMode(BCM2835_SPI_MODE0);
     bcm2835_spi_setClockDivider(SPI_SPEED);
     bcm2835_spi_chipSelect(BCM2835_SPI_CS_NONE);
-    bcm2835_gpio_set_pud(RPI_GPIO_P1_19, BCM2835_GPIO_PUD_DOWN);	// MOSI
-    bcm2835_gpio_set_pud(RPI_GPIO_P1_21, BCM2835_GPIO_PUD_DOWN);	// MISO
-    bcm2835_gpio_set_pud(RPI_GPIO_P1_24, BCM2835_GPIO_PUD_UP);		// CS0
+#endif
 
+#ifdef TRANSPORT_FTDI
+    rtapi_print("Info: Initialize FTDI-SPI connection\n");
+	spi_init();
 #endif
 
     retval = hal_pin_bit_newf(HAL_IN, &(data->SPIenable),
@@ -379,22 +407,37 @@ int rtapi_app_main(void)
 
     for (n = 0; n < VARIABLE_OUTPUTS; n++) {
         retval = hal_pin_float_newf(HAL_IN, &(data->setPoint[n]),
-                                    comp_id, "%s.SP.%01d", prefix, n);
+                                    comp_id, "%s.%s", prefix, vout_names[n]);
         if (retval < 0) goto error;
         *(data->setPoint[n]) = 0.0;
+
+		retval = hal_pin_float_newf(HAL_IN, &(data->setPointScale[n]),
+									comp_id, "%s.%s-scale", prefix, vout_names[n]);
+        if (retval < 0) goto error;
+        *(data->setPointScale[n]) = 1.0;
+
+		retval = hal_pin_float_newf(HAL_IN, &(data->setPointOffset[n]),
+									comp_id, "%s.%s-offset", prefix, vout_names[n]);
+        if (retval < 0) goto error;
+        *(data->setPointOffset[n]) = 0.0;
     }
 
     for (n = 0; n < VARIABLE_INPUTS; n++) {
-		retval = hal_pin_float_newf(HAL_OUT, &(data->processVariable[n]),
-									comp_id, "%s.PV.%01d", prefix, n);
+		retval = hal_pin_float_newf(HAL_OUT, &(data->processVariable[n]), comp_id, "%s.%s", prefix, vin_names[n]);
         if (retval < 0) goto error;
         *(data->processVariable[n]) = 0.0;
 
-		retval = hal_pin_s32_newf(HAL_OUT, &(data->processVariableS32[n]),
-									comp_id, "%s.PV.%01d-s32", prefix, n);
+		retval = hal_pin_s32_newf(HAL_OUT, &(data->processVariableS32[n]), comp_id, "%s.%s-s32", prefix, vin_names[n]);
         if (retval < 0) goto error;
         *(data->processVariableS32[n]) = 0;
 
+		retval = hal_pin_float_newf(HAL_IN, &(data->processVariableScale[n]), comp_id, "%s.%s-scale", prefix, vin_names[n]);
+        if (retval < 0) goto error;
+        *(data->processVariableScale[n]) = 1.0;
+
+		retval = hal_pin_float_newf(HAL_IN, &(data->processVariableOffset[n]), comp_id, "%s.%s-offset", prefix, vin_names[n]);
+        if (retval < 0) goto error;
+        *(data->processVariableOffset[n]) = 0.0;
 
     }
 
@@ -431,8 +474,6 @@ int rtapi_app_main(void)
             }
         }
     }
-
-
 
 error:
     if (retval < 0) {
@@ -678,6 +719,84 @@ exit:
 
 #endif
 
+#ifdef TRANSPORT_FTDI
+
+int spi_init(void) {
+    int ftdi_status = 0;
+    ftdi = ftdi_new();
+    if ( ftdi == NULL ) {
+        fprintf(stderr, "Failed to initialize device\r\n");
+        return 1;
+    }
+    ftdi_status = ftdi_usb_open(ftdi, VENDOR, PRODUCT);
+    if ( ftdi_status != 0 ) {
+        fprintf(stderr, "Can't open device. Got error %s\r\n", ftdi_get_error_string(ftdi));
+        return 1;
+    }
+    ftdi_usb_reset(ftdi);
+    ftdi_set_interface(ftdi, INTERFACE_B);
+    ftdi_set_bitmode(ftdi, 0, 0); // reset
+    ftdi_set_bitmode(ftdi, 0, BITMODE_MPSSE); // enable mpsse on all bits
+    ftdi_usb_purge_buffers(ftdi);
+    usleep(50000); // sleep 50 ms for setup to complete
+    return 0;
+}
+
+int spi_exit(void) {
+    ftdi_usb_reset(ftdi);
+    ftdi_usb_close(ftdi);
+    return 0;
+}
+
+int spi_rw_buffer(uint8_t* pBuffer, uint8_t* rxBuffer, int numBytes) {
+	int inx = 0;
+	uint8_t buf[1024] = {0};
+
+	// assert CS (active low)
+	buf[inx++] = SET_BITS_LOW;
+	buf[inx++] = 0;
+	buf[inx++] = outpins;
+
+	// commands to write and read n bytes in SPI0 (polarity = phase = 0) mode
+	buf[inx++] = MPSSE_DO_WRITE | MPSSE_WRITE_NEG | MPSSE_DO_READ;
+	buf[inx++] = (numBytes - 1) & 0xff; // length-1 low byte
+	buf[inx++] = ((numBytes - 1)>>8) & 0xff; // length-1 high byte
+	memcpy(buf+inx, pBuffer, numBytes);
+	inx += numBytes;
+
+	// de-assert CS
+	buf[inx++] = SET_BITS_LOW;
+	buf[inx++] = CS;
+	buf[inx++] = outpins;
+
+	ftdi_usb_purge_tx_buffer(ftdi);
+	if ( ftdi_write_data(ftdi, buf, inx) != inx ) {
+        fprintf(stderr, "spi write failed\r\n");
+        return -1;
+    }
+
+	uint8_t readBuf[1024] = {0};
+	if ( ftdi_read_data(ftdi, readBuf, numBytes) != numBytes ) {
+		fprintf(stderr, "spi read failed\r\n");
+        return -1;
+    } else {
+        memcpy(rxBuffer, readBuf, numBytes);
+    }
+
+    /*
+    int n = 0;
+    printf("%d - ", numBytes);
+    for (n = 0; n < numBytes; n++) {
+        printf("%d ", rxBuffer[n]);
+    }
+    printf("\n");
+    */
+
+	return 0;
+}
+
+#endif
+
 void update_freq(void *arg, long period)
 {
     int i;
@@ -848,17 +967,15 @@ void rio_readwrite()
     int i = 0;
     int bi = 0;
     double curr_pos;
+    long new_stamp;
+    long duration;
+
+    new_stamp = rtapi_get_time();
+    duration = new_stamp - stamp;
+    stamp = new_stamp;
 
     // Data header
     txData.header = PRU_READ;
-
-    // update the PRUreset output
-    if (*(data->PRUreset)) {
-        //bcm2835_gpio_set(reset_gpio_pin);
-    }
-    else {
-        //bcm2835_gpio_clr(reset_gpio_pin);
-    }
 
     if (*(data->SPIenable)) {
         if( (*(data->SPIreset) && !(data->SPIresetOld)) || *(data->SPIstatus) ) {
@@ -871,6 +988,8 @@ void rio_readwrite()
             for (i = 0; i < JOINTS; i++) {
                 if (joints_type[i] == JOINT_PWMDIR) {
                     txData.jointFreqCmd[i] = data->freq[i];
+                } else if (joints_type[i] == JOINT_STEPPER) {
+                    txData.jointFreqCmd[i] = PRU_OSC / data->freq[i] / 2;
                 } else {
                     txData.jointFreqCmd[i] = PRU_OSC / data->freq[i];
                 }
@@ -887,29 +1006,10 @@ void rio_readwrite()
 
             // Set points
             for (i = 0; i < VARIABLE_OUTPUTS; i++) {
-                if (vout_type[i] == VOUT_TYPE_SINE) {
-                    txData.setPoint[i] = PRU_OSC / *(data->setPoint[i]) / vout_freq[i];
-                } else if (vout_type[i] == VOUT_TYPE_PWMDIR) {
-                    if (*(data->setPoint[i]) > vout_max[i]) {
-                        *(data->setPoint[i]) = vout_max[i];
-                    }
-                    if (*(data->setPoint[i]) < -vout_max[i]) {
-                        *(data->setPoint[i]) = -vout_max[i];
-                    }
-                    txData.setPoint[i] = (*(data->setPoint[i])) * (PRU_OSC / vout_freq[i]) / (vout_max[i]);
-                } else if (vout_type[i] == VOUT_TYPE_PWM) {
-                    if (*(data->setPoint[i]) > vout_max[i]) {
-                        *(data->setPoint[i]) = vout_max[i];
-                    }
-                    if (*(data->setPoint[i]) < vout_min[i]) {
-                        *(data->setPoint[i]) = vout_min[i];
-                    }
-                    txData.setPoint[i] = (*(data->setPoint[i]) - vout_min[i]) * (PRU_OSC / vout_freq[i]) / (vout_max[i] - vout_min[i]);
-                } else if (vout_type[i] == VOUT_TYPE_RCSERVO) {
-                    txData.setPoint[i] = (*(data->setPoint[i]) + 200 + 100) * (PRU_OSC / 200000);
-                } else {
-                    txData.setPoint[i] = (*(data->setPoint[i]) - vout_min[i]) * (0xFFFFFFFF / 2) / (vout_max[i] - vout_min[i]);
-                }
+                float value = *(data->setPoint[i]);
+                value *= *(data->setPointScale[i]);
+                value += *(data->setPointOffset[i]);
+                txData.setPoint[i] = vout_calc[i](value);
             }
 
             // Outputs
@@ -962,20 +1062,18 @@ void rio_readwrite()
 
                 // Feedback
                 for (i = 0; i < VARIABLE_INPUTS; i++) {
-                    float value = rxData.processVariable[i];
-                    if (vin_type[i] == VIN_TYPE_FREQ) {
-                        if (value != 0) {
-                            value = (float)PRU_OSC / value;
-                        }
-                    } else if (vin_type[i] == VIN_TYPE_TIME) {
-                        if (value != 0) {
-                            value = 1000.0 / ((float)PRU_OSC / value);
-                        }
-                    } else if (vin_type[i] == VIN_TYPE_SONAR) {
-                        if (value != 0) {
-                            value = 1000.0 / (float)PRU_OSC / 20.0 * value * 343.2;
-                        }
+                    float value = 0;
+                    if (vin_bits[i] == 32) {
+                        value = (float)rxData.processVariable32[i];
+                    } else if (vin_bits[i] == 16) {
+                        value = (float)rxData.processVariable16[i - VARIABLE_INPUTS_32];
+                    } else if (vin_bits[i] == 8) {
+                        value = (float)rxData.processVariable8[i - VARIABLE_INPUTS_32 - VARIABLE_INPUTS_16];
                     }
+
+                    value = vin_calc[i](value);
+                    value += *(data->processVariableOffset[i]);
+                    value *= *(data->processVariableScale[i]);
                     *(data->processVariable[i]) = value;
                     *(data->processVariableS32[i]) = (int)value;
                 }
@@ -1024,10 +1122,11 @@ void rio_readwrite()
                 // we have received a BAD payload from the PRU
                 *(data->SPIstatus) = 0;
 
-                rtapi_print("Bad SPI payload = %x\n", rxData.header);
-                //for (i = 0; i < SPIBUFSIZE; i++) {
-                //	rtapi_print("%d\n",rxData.rxBuffer[i]);
-                //}
+                rtapi_print("Bad interface payload = %x\n", rxData.header);
+                for (i = 0; i < SPIBUFSIZE; i++) {
+                	rtapi_print("%d ",rxData.rxBuffer[i]);
+                }
+                rtapi_print("\n");
                 break;
             }
         }
@@ -1043,8 +1142,11 @@ void rio_transfer()
 {
 
 #ifdef TRANSPORT_UDP
+    int i;
     int ret;
-    long long t1, t2;
+    long t1;
+    long t2;
+    uint8_t rxBufferTmp[SPIBUFSIZE*2];
 
     // Send datagram
     ret = send(udpSocket, txData.txBuffer, SPIBUFSIZE, 0);
@@ -1052,8 +1154,8 @@ void rio_transfer()
     // Receive incoming datagram
     t1 = rtapi_get_time();
     do {
-        ret = recv(udpSocket, rxData.rxBuffer, SPIBUFSIZE, 0);
-        if(ret < 0) {
+        ret = recv(udpSocket, rxBufferTmp, SPIBUFSIZE*2, 0);
+        if (ret < 0) {
             rtapi_delay(READ_PCK_DELAY_NS);
         }
         t2 = rtapi_get_time();
@@ -1062,9 +1164,22 @@ void rio_transfer()
 
     if (ret > 0) {
         errCount = 0;
+
+        if (ret == SPIBUFSIZE) {
+            memcpy(rxData.rxBuffer, rxBufferTmp, SPIBUFSIZE);
+        } else {
+
+            rtapi_print("wronng size = %d\n", ret);
+            for (i = 0; i < ret; i++) {
+                rtapi_print("%d ",rxData.rxBuffer[i]);
+            }
+            rtapi_print("\n");
+
+        }
+
     } else {
         errCount++;
-        rtapi_print("Ethernet ERROR: N = %d\n", errCount);
+        rtapi_print("Ethernet ERROR: N = %d (ret: %d)\n", errCount, ret);
     }
 
     if (errCount > 2) {
@@ -1073,23 +1188,40 @@ void rio_transfer()
     }
 #endif
 
-#ifdef TRANSPORT_USB
+#ifdef TRANSPORT_SERIAL
 
-    write (serial_fd, txData.txBuffer, SPIBUFSIZE);
-    read(serial_fd, rxData.rxBuffer, SPIBUFSIZE);
+    uint8_t rxBufferTmp[SPIBUFSIZE];
+
+    write(serial_fd, txData.txBuffer, SPIBUFSIZE);
+    tcdrain(serial_fd);
+    tcflush(serial_fd, TCIFLUSH);
+    int cnt = 0;
+    int rec = 0;
+    while((rec = read(serial_fd, rxBufferTmp, SPIBUFSIZE)) < SPIBUFSIZE && cnt++ < 250) {
+        usleep(100);
+    }
+    if (rec == SPIBUFSIZE) {
+        memcpy(rxData.rxBuffer, rxBufferTmp, SPIBUFSIZE);
+    }
 
 #endif
 
 #ifdef TRANSPORT_SPI
     int i;
 
-    bcm2835_gpio_fsel(RPI_GPIO_P1_26, BCM2835_GPIO_FSEL_OUTP);
-    bcm2835_gpio_write(RPI_GPIO_P1_26, LOW);
+    bcm2835_gpio_fsel(SPI_PIN_CS, BCM2835_GPIO_FSEL_OUTP);
+    bcm2835_gpio_write(SPI_PIN_CS, LOW);
 
     for (i = 0; i < SPIBUFSIZE; i++) {
         rxData.rxBuffer[i] = bcm2835_spi_transfer(txData.txBuffer[i]);
     }
-    bcm2835_gpio_write(RPI_GPIO_P1_26, HIGH);
+    bcm2835_gpio_write(SPI_PIN_CS, HIGH);
+#endif
+
+#ifdef TRANSPORT_FTDI
+    int i;
+	uint8_t rwbuf[18] = {116, 105, 114, 119, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 0};
+	spi_rw_buffer(txData.txBuffer, rxData.rxBuffer, SPIBUFSIZE);
 #endif
 
 }

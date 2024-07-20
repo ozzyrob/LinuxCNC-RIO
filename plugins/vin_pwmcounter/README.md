@@ -4,7 +4,11 @@ Variable-Input for pulse width measurement
 
 ```
 {
-    "type": "pwm",
+    "type": "vin_pwmcounter",
     "pin": "H5"
 },
 ```
+
+# vin_pwmcounter.v
+![graphviz](./vin_pwmcounter.svg)
+

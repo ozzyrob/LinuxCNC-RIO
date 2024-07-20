@@ -1,4 +1,6 @@
 class Plugin:
+    ptype = "din_bit"
+
     def __init__(self, jdata):
         self.jdata = jdata
 
@@ -6,9 +8,21 @@ class Plugin:
         return [
             {
                 "basetype": "din",
-                "subtype": "",
+                "subtype": self.ptype,
                 "comment": "normal binary input pin",
                 "options": {
+                    "name": {
+                        "type": "str",
+                        "name": "pin name",
+                        "comment": "the name of the pin",
+                        "default": "",
+                    },
+                    "net": {
+                        "type": "dtarget",
+                        "name": "net target",
+                        "comment": "the target net of the pin in the hal",
+                        "default": "",
+                    },
                     "pin": {
                         "type": "input",
                         "name": "input pin",
@@ -19,38 +33,10 @@ class Plugin:
                         "comment": "activates the internal pullup resistor for this pin",
                         "default": False,
                     },
-                },
-            },
-            {
-                "basetype": "din",
-                "subtype": "home",
-                "comment": "input pin used for home-switches",
-                "options": {
-                    "pin": {
-                        "type": "input",
-                        "name": "input pin",
-                    },
-                    "pullup": {
+                    "invert": {
                         "type": "bool",
-                        "name": "input pin",
-                        "comment": "activates the internal pullup resistor for this pin",
-                        "default": False,
-                    },
-                },
-            },
-            {
-                "basetype": "din",
-                "subtype": "probe",
-                "comment": "input pin used for the probe-switche",
-                "options": {
-                    "pin": {
-                        "type": "input",
-                        "name": "input pin",
-                    },
-                    "pullup": {
-                        "type": "bool",
-                        "name": "input pin",
-                        "comment": "activates the internal pullup resistor for this pin",
+                        "name": "invert pin",
+                        "comment": "invert this pin",
                         "default": False,
                     },
                 },
@@ -58,20 +44,45 @@ class Plugin:
         ]
 
     def pinlist(self):
-        pinlist_out = []
-        for num, din in enumerate(self.jdata["din"]):
-            pullup = din.get("pullup", False)
-            pinlist_out.append((f"DIN{num}", din["pin"], "INPUT", pullup))
-        return pinlist_out
-
-    def dins(self):
-        dins_out = 0
-        for _num, _din in enumerate(self.jdata["din"]):
-            dins_out += 1
-        return dins_out
+        ret = []
+        for num, data in enumerate(self.jdata["plugins"]):
+            if data.get("type") == self.ptype:
+                name = data.get("name") or f"DIN.{num}"
+                nameIntern = name.replace(".", "").replace("-", "_").upper()
+                pullup = data.get("pullup", False)
+                debounce = data.get("debounce", False)
+                if debounce:
+                    ret.append((f"{nameIntern}_RAW", data["pin"], "INPUT", pullup))
+                else:
+                    ret.append((nameIntern, data["pin"], "INPUT", pullup))
+        return ret
 
     def dinnames(self):
-        dins_out = []
-        for num, _din in enumerate(self.jdata["din"]):
-            dins_out.append(f"DIN{num}")
-        return dins_out
+        ret = []
+        for num, data in enumerate(self.jdata["plugins"]):
+            if data.get("type") == self.ptype:
+                name = data.get("name") or f"DIN.{num}"
+                nameIntern = name.replace(".", "").replace("-", "_").upper()
+                data["_name"] = name
+                data["_prefix"] = nameIntern
+                ret.append(data)
+        return ret
+
+    def funcs(self):
+        ret = []
+        for num, data in enumerate(self.jdata["plugins"]):
+            if data.get("type") == self.ptype:
+                name = data.get("name") or f"DIN.{num}"
+                nameIntern = name.replace(".", "").replace("-", "_").upper()
+                debounce = data.get("debounce", False)
+                debounce_val = 16
+                if debounce:
+                    if debounce is not True:
+                        debounce_val = debounce
+                    ret.append(f"    wire {nameIntern};")
+                    ret.append(f"    debouncer #({debounce_val}) din_debouncer{num} (")
+                    ret.append("        .clk (sysclk),")
+                    ret.append(f"        .SIGNAL ({nameIntern}_RAW),")
+                    ret.append(f"        .SIGNAL_state ({nameIntern})")
+                    ret.append("    );")
+        return ret

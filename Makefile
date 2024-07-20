@@ -4,7 +4,7 @@
 CONFIG ?= configs/Lattice-iCE40HX8K_BOB/config.json
 TARGETNAME = $(shell jq -r '.name' < ${CONFIG})
 
-all: build firmware components
+all: build gateware components
 
 build:
 	python3 buildtool.py ${CONFIG}
@@ -13,17 +13,17 @@ clean:
 	rm -rf Output/${TARGETNAME}
 
 format:
-	black buildtool.py plugins/*/*.py
-	astyle --style=gnu -A4  generators/linuxcnc_component/rio.c
+	black buildtool.py projectLoader.py qtsetup.py qt-testgui.py generators/*/*.py plugins/*/*.py
+	#astyle --style=gnu -A4  generators/linuxcnc_component/rio.c
 
 isort:
-	isort buildtool.py plugins/*/*.py
+	isort buildtool.py projectLoader.py qtsetup.py qt-testgui.py generators/*/*.py plugins/*/*.py
 
 flake8:
-	flake8 --max-line-length 200 buildtool.py plugins/*/*.py
+	flake8 --ignore S108,S607,S605,F401,F403,W291,W503 --max-line-length 200 buildtool.py projectLoader.py qtsetup.py qt-testgui.py generators/*/*.py plugins/*/*.py
 
 mypy:
-	mypy buildtool.py plugins/*/*.py
+	mypy buildtool.py projectLoader.py qtsetup.py qt-testgui.py generators/*/*.py plugins/*/*.py
 
 check: isort flake8 mypy
 
@@ -35,8 +35,8 @@ schema: files/schema.svg
 files/schema.svg: files/schema.sh
 	files/schema.sh > files/schema.svg
 
-firmware:
-	(cd Output/${TARGETNAME}/Firmware/ ; make)
+gateware:
+	(cd Output/${TARGETNAME}/Gateware/ ; make)
 
 components:
 	sudo halcompile --install Output/${TARGETNAME}/LinuxCNC/Components/rio.c
@@ -49,3 +49,6 @@ verilator: plugins/*/*_*.v
 
 verilatorWall: plugins/*/*_*.v
 	@for file in $^ ; do verilator --lint-only -Wall $${file}; done
+
+unittest:
+	python3.9 -m pytest -vv -v tests/test_generator.py

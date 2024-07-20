@@ -1,0 +1,137 @@
+{
+    "name": "Arty-a7-35t",
+    "description": "Arty a7-35t - testing",
+    "boardcfg": "Arty-a7-35t",
+    "modules": [
+        {
+            "slot": "ChipKit",
+            "module": "cnc-shield-v3",
+            "setup": {}
+        },
+        {
+            "slot": "PMOD_JA",
+            "module": "interface-spi",
+            "setup": {}
+        }
+    ],
+    "plugins": [
+        {
+            "debounce": true,
+            "pin": "A8",
+            "name": "SW0",
+            "type": "din_bit"
+        },
+        {
+            "debounce": true,
+            "pin": "C11",
+            "name": "SW1",
+            "type": "din_bit"
+        },
+        {
+            "debounce": true,
+            "pin": "C10",
+            "name": "SW2",
+            "type": "din_bit"
+        },
+        {
+            "debounce": true,
+            "pin": "A10",
+            "name": "SW3",
+            "type": "din_bit"
+        },
+        {
+            "debounce": true,
+            "pin": "D9",
+            "name": "BTN0",
+            "type": "din_bit"
+        },
+        {
+            "debounce": true,
+            "pin": "C9",
+            "name": "BTN1",
+            "type": "din_bit"
+        },
+        {
+            "debounce": true,
+            "pin": "B9",
+            "name": "BTN2",
+            "type": "din_bit"
+        },
+        {
+            "debounce": true,
+            "pin": "B8",
+            "name": "BTN3",
+            "type": "din_bit"
+        },
+        {
+            "type": "dout_bit",
+            "name": "LD0_R",
+            "pin": "G6"
+        },
+        {
+            "type": "dout_bit",
+            "name": "LD0_G",
+            "pin": "F6"
+        },
+        {
+            "type": "dout_bit",
+            "name": "LD0_B",
+            "pin": "E1"
+        },
+        {
+            "type": "dout_bit",
+            "name": "LD1_R",
+            "pin": "G3"
+        },
+        {
+            "type": "dout_bit",
+            "name": "LD1_G",
+            "pin": "J4"
+        },
+        {
+            "type": "dout_bit",
+            "name": "LD1_B",
+            "pin": "G4"
+        },
+        {
+            "type": "dout_bit",
+            "name": "LD2_R",
+            "pin": "J3"
+        },
+        {
+            "type": "dout_bit",
+            "name": "LD2_G",
+            "pin": "J2"
+        },
+        {
+            "type": "dout_bit",
+            "name": "LD2_B",
+            "pin": "H4"
+        },
+        {
+            "type": "dout_bit",
+            "name": "LD3_R",
+            "pin": "K1"
+        },
+        {
+            "type": "dout_bit",
+            "name": "LD3_G",
+            "pin": "H6"
+        },
+        {
+            "type": "dout_bit",
+            "name": "LD3_B",
+            "pin": "K2"
+        },
+        {
+            "type": "dout_bit",
+            "name": "LD4",
+            "pin": "H5"
+        },
+        {
+            "type": "dout_bit",
+            "name": "LD5",
+            "pin": "J5"
+        }
+    ]
+}

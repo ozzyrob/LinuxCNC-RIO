@@ -1,4 +1,6 @@
 class Plugin:
+    ptype = "vin_pulsecounter"
+
     def __init__(self, jdata):
         self.jdata = jdata
 
@@ -6,23 +8,40 @@ class Plugin:
         return [
             {
                 "basetype": "vin",
-                "subtype": "counter",
+                "subtype": self.ptype,
                 "comment": "counting signals on the input pins (up/down), can be reset by the reset-pin",
                 "options": {
-                    "pin_up": {
-                        "type": "input",
-                        "name": "up pin",
-                        "comment": "to count up",
+                    "name": {
+                        "type": "str",
+                        "name": "pin name",
+                        "comment": "the name of the pin",
+                        "default": "",
                     },
-                    "pin_down": {
-                        "type": "input",
-                        "name": "down pin",
-                        "comment": "to count down",
+                    "net": {
+                        "type": "vtarget",
+                        "name": "net target",
+                        "comment": "the target net of the pin in the hal",
+                        "default": "",
                     },
-                    "pin_reset": {
-                        "type": "input",
-                        "name": "reset pin",
-                        "comment": "reset the counter to zero",
+                    "pins": {
+                        "type": "dict",
+                        "options": {
+                            "up": {
+                                "type": "input",
+                                "name": "up pin",
+                                "comment": "to count up",
+                            },
+                            "down": {
+                                "type": "input",
+                                "name": "down pin",
+                                "comment": "to count down",
+                            },
+                            "reset": {
+                                "type": "input",
+                                "name": "reset pin",
+                                "comment": "reset the counter to zero",
+                            },
+                        },
                     },
                 },
             }
@@ -30,56 +49,67 @@ class Plugin:
 
     def pinlist(self):
         pinlist_out = []
-        for num, vin in enumerate(self.jdata.get("vin", [])):
-            if vin.get("type") in ("counter",):
-                pullup = vin.get("pullup", False)
-                if "pin_up" in vin:
-                    pinlist_out.append(
-                        (f"VIN{num}_PULSECOUNTER_UP", vin["pin_up"], "INPUT", pullup)
-                    )
-                if "pin_down" in vin:
+        for num, data in enumerate(self.jdata["plugins"]):
+            if data.get("type") == self.ptype:
+                pullup = data.get("pullup", False)
+                if "up" in data["pins"]:
                     pinlist_out.append(
                         (
-                            f"VIN{num}_PULSECOUNTER_DOWN",
-                            vin["pin_down"],
+                            f"VIN{num}_PULSECOUNTER_UP",
+                            data["pins"]["up"],
                             "INPUT",
                             pullup,
                         )
                     )
-                if "pin_reset" in vin:
+                if "down" in data["pins"]:
+                    pinlist_out.append(
+                        (
+                            f"VIN{num}_PULSECOUNTER_DOWN",
+                            data["pins"]["down"],
+                            "INPUT",
+                            pullup,
+                        )
+                    )
+                if "reset" in data["pins"]:
                     pinlist_out.append(
                         (
                             f"VIN{num}_PULSECOUNTER_RESET",
-                            vin["pin_reset"],
+                            data["pins"]["reset"],
                             "INPUT",
                             pullup,
                         )
                     )
         return pinlist_out
 
-    def vins(self):
-        vins_out = 0
-        for _num, vin in enumerate(self.jdata.get("vin", [])):
-            if vin.get("type") in ("counter",):
-                vins_out += 1
-        return vins_out
+    def vinnames(self):
+        ret = []
+        for num, data in enumerate(self.jdata["plugins"]):
+            if data.get("type") == self.ptype:
+                name = data.get("name", f"PV.{num}")
+                nameIntern = name.replace(".", "").replace("-", "_").upper()
+                data["_name"] = name
+                data["_prefix"] = nameIntern
+                ret.append(data)
+        return ret
 
     def funcs(self):
-        func_out = ["    // vin_pulsecounter's"]
-        for num, vin in enumerate(self.jdata.get("vin", [])):
-            if vin.get("type") in ("counter",):
+        func_out = []
+        for num, data in enumerate(self.jdata["plugins"]):
+            if data.get("type") == self.ptype:
+                name = data.get("name", f"PV.{num}")
+                nameIntern = name.replace(".", "").replace("-", "_").upper()
                 func_out.append(f"    vin_pulsecounter vin_pulsecounter{num} (")
                 func_out.append("        .clk (sysclk),")
-                func_out.append(f"        .counter (processVariable{num}),")
-                if "pin_up" in vin:
+                func_out.append(f"        .counter ({nameIntern}),")
+                if "up" in data["pins"]:
                     func_out.append(f"        .UP (VIN{num}_PULSECOUNTER_UP),")
                 else:
                     func_out.append("        .UP (1'd0),")
-                if "pin_down" in vin:
+                if "down" in data["pins"]:
                     func_out.append(f"        .DOWN (VIN{num}_PULSECOUNTER_DOWN),")
                 else:
                     func_out.append("        .DOWN (1'd0),")
-                if "pin_reset" in vin:
+                if "reset" in data["pins"]:
                     func_out.append(f"        .RESET (VIN{num}_PULSECOUNTER_RESET)")
                 else:
                     func_out.append("        .RESET (1'd0)")
@@ -87,7 +117,7 @@ class Plugin:
         return func_out
 
     def ips(self):
-        for num, vin in enumerate(self.jdata["vin"]):
-            if vin["type"] in ["counter"]:
+        for num, data in enumerate(self.jdata["plugins"]):
+            if data["type"] == self.ptype:
                 return ["vin_pulsecounter.v"]
         return []

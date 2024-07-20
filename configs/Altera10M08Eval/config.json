@@ -1,0 +1,103 @@
+{
+    "name": "Altera10M08Eval",
+    "description": "Altera10M08Eval",
+    "boardcfg": "Altera10M08Eval",
+    "transport": "SPI",
+    "rpispi": {
+        "MOSI": 10,
+        "MISO": 9,
+        "CLK": 11,
+        "CS": 7
+    },
+    "_interface": [
+        {
+            "type": "uart",
+            "pins": {
+                "RX": "PIN_58",
+                "TX": "PIN_57"
+            }
+        }
+    ],
+    "interface": [
+        {
+            "type": "spi",
+            "pins": {
+                "MOSI": "PIN_55",
+                "MISO": "PIN_56",
+                "SCK": "PIN_59",
+                "SEL": "PIN_60"
+            }
+        }
+    ],
+    "modules": [
+        {
+            "slot": "ChipKit",
+            "module": "cnc-shield-v3",
+            "setup": {
+                "plugins": [
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {
+                        "scale": "6400"
+                    },
+                    {
+                        "scale": "6400"
+                    },
+                    {
+                        "scale": "400"
+                    }
+                ]
+            }
+        }
+    ],
+    "plugins": [
+        {
+            "type": "dout_bit",
+            "name": "LED3",
+            "invert": "true",
+            "pin": "PIN_135"
+        },
+        {
+            "type": "dout_bit",
+            "name": "LED4",
+            "invert": "true",
+            "pin": "PIN_140"
+        },
+        {
+            "type": "dout_bit",
+            "name": "LED5",
+            "invert": "true",
+            "pin": "PIN_141"
+        },
+        {
+            "type": "din_bit",
+            "name": "SW1",
+            "pin": "PIN_120"
+        },
+        {
+            "type": "din_bit",
+            "name": "SW2",
+            "pin": "PIN_124"
+        },
+        {
+            "type": "din_bit",
+            "name": "SW3",
+            "pin": "PIN_127"
+        },
+        {
+            "type": "din_bit",
+            "name": "SW4",
+            "pin": "PIN_130"
+        },
+        {
+            "type": "din_bit",
+            "name": "SW5",
+            "pin": "PIN_131"
+        }
+    ],
+    "expansion": []
+}

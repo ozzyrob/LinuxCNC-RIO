@@ -1,4 +1,6 @@
 class Plugin:
+    ptype = "dout_bit"
+
     def __init__(self, jdata):
         self.jdata = jdata
 
@@ -6,8 +8,21 @@ class Plugin:
         return [
             {
                 "basetype": "dout",
-                "subtype": "",
+                "subtype": self.ptype,
+                "comment": "Digital Output",
                 "options": {
+                    "name": {
+                        "type": "str",
+                        "name": "pin name",
+                        "comment": "the name of the pin",
+                        "default": "",
+                    },
+                    "net": {
+                        "type": "dsource",
+                        "name": "net source",
+                        "comment": "the source net of the pin in the hal",
+                        "default": "",
+                    },
                     "pin": {
                         "type": "output",
                         "name": "output pin",
@@ -17,19 +32,21 @@ class Plugin:
         ]
 
     def pinlist(self):
-        pinlist_out = []
-        for num, dout in enumerate(self.jdata["dout"]):
-            pinlist_out.append((f"DOUT{num}", dout["pin"], "OUTPUT"))
-        return pinlist_out
-
-    def douts(self):
-        douts_out = 0
-        for _num, _dout in enumerate(self.jdata["dout"]):
-            douts_out += 1
-        return douts_out
+        ret = []
+        for num, data in enumerate(self.jdata["plugins"]):
+            if data.get("type") == self.ptype:
+                name = data.get("name", f"DOUT.{num}")
+                nameIntern = name.replace(".", "").replace("-", "_").upper()
+                ret.append((nameIntern, data["pin"], "OUTPUT"))
+        return ret
 
     def doutnames(self):
-        douts_out = []
-        for num, _dout in enumerate(self.jdata["dout"]):
-            douts_out.append(f"DOUT{num}")
-        return douts_out
+        ret = []
+        for num, data in enumerate(self.jdata["plugins"]):
+            if data.get("type") == self.ptype:
+                name = data.get("name", f"DOUT.{num}")
+                nameIntern = name.replace(".", "").replace("-", "_").upper()
+                data["_name"] = name
+                data["_prefix"] = nameIntern
+                ret.append(data)
+        return ret

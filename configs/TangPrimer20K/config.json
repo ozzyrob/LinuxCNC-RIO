@@ -1,0 +1,125 @@
+{
+    "name": "TangPrimer20K",
+    "description": "TangPrimer20K",
+    "boardcfg": "TangPrimer20K",
+    "transport": "UDP",
+    "axis": 3,
+    "interface": [
+        {
+            "type": "udp_tangprimer20k",
+            "mac": "06:00:AA:BB:0C:DE",
+            "ip": "192.168.10.15",
+            "pins": {
+                "phyrst": "F10",
+                "netrmii_txd_1": "E14",
+                "netrmii_txd_0": "D16",
+                "netrmii_txen": "E16",
+                "netrmii_mdc": "F14",
+                "netrmii_rxd_1": "C9",
+                "netrmii_rxd_0": "F15",
+                "netrmii_rx_crs": "M6",
+                "netrmii_clk50m": "A9",
+                "netrmii_mdio": "F16"
+            }
+        }
+    ],
+    "_enable": {
+        "pin": "R13"
+    },
+    "modules": [
+        {
+            "slot": "SLOT1",
+            "module": "icebreaker_led_sw"
+        },
+        {
+            "slot": "SLOT2",
+            "module": "joint3+dout1"
+        }
+    ],
+    "plugins": [
+        {
+            "type": "din_bit",
+            "name": "SW1",
+            "invert": true,
+            "pin": "B10"
+        },
+        {
+            "type": "din_bit",
+            "name": "SW2",
+            "invert": true,
+            "pin": "E9"
+        },
+        {
+            "type": "din_bit",
+            "name": "SW3",
+            "invert": true,
+            "pin": "E8"
+        },
+        {
+            "type": "din_bit",
+            "name": "SW4",
+            "invert": true,
+            "pin": "T4"
+        },
+        {
+            "type": "din_bit",
+            "name": "SW5",
+            "invert": true,
+            "pin": "T5"
+        },
+        {
+            "type": "din_bit",
+            "name": "KEY1",
+            "invert": true,
+            "pin": "T10"
+        },
+        {
+            "type": "din_bit",
+            "name": "KEY2",
+            "invert": true,
+            "pin": "T3"
+        },
+        {
+            "type": "din_bit",
+            "name": "KEY3",
+            "invert": true,
+            "pin": "T2"
+        },
+        {
+            "type": "din_bit",
+            "name": "KEY4",
+            "invert": true,
+            "pin": "D7"
+        },
+        {
+            "type": "din_bit",
+            "name": "KEY5",
+            "invert": true,
+            "pin": "C7"
+        },
+        {
+            "type": "dout_bit",
+            "name": "BLED2",
+            "invert": true,
+            "pin": "N16"
+        },
+        {
+            "type": "dout_bit",
+            "name": "BLED3",
+            "invert": true,
+            "pin": "N14"
+        },
+        {
+            "type": "dout_bit",
+            "name": "BLED4",
+            "invert": true,
+            "pin": "L14"
+        },
+        {
+            "type": "dout_bit",
+            "name": "BLED5",
+            "invert": true,
+            "pin": "L16"
+        }
+    ]
+}

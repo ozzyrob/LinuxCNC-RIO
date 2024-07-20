@@ -1,15 +1,7 @@
 {
     "name": "Alhambra-II",
     "description": "Alhambra II FPGA board with 3 Axis SPI",
-    "board": "Alhambra-II",
-    "toolchain": "icestorm",
-    "family": "ice40",
-    "type": "hx4k",
-    "package": "tq144",
-    "clock": {
-        "speed": "12000000",
-        "pin": "49"
-    },
+    "boardcfg": "Alhambra-II",
     "transport": "UDP",
     "ip": "192.168.10.28",
     "axis": 3,
@@ -24,81 +16,87 @@
             }
         }
     ],
-    "blink": {
-        "pin": "37"
-    },
-    "error": {
-        "invert": true,
-        "pin": "38"
-    },
     "enable": {
         "pin": "39"
     },
-    "dout": [
-        {
-            "pin": "41"
-        },
-        {
-            "pin": "42"
-        },
-        {
-            "pin": "43"
-        },
-        {
-            "pin": "44"
-        }
-    ],
-    "din": [
+    "plugins": [
         {
             "pullup": true,
-            "pin": "63"
+            "pin": "63",
+            "name": "DIN0",
+            "type": "din_bit"
         },
         {
             "pullup": true,
-            "pin": "64"
-        }
-    ],
-    "vout": [
+            "pin": "64",
+            "name": "DIN1",
+            "type": "din_bit"
+        },
         {
-            "type": "pwm",
-            "pin": "45"
-        }
-    ],
-    "vin": [
+            "pin": "41",
+            "name": "DOUT0",
+            "type": "dout_bit"
+        },
         {
-            "type": "counter",
+            "pin": "42",
+            "name": "DOUT1",
+            "type": "dout_bit"
+        },
+        {
+            "pin": "43",
+            "name": "DOUT2",
+            "type": "dout_bit"
+        },
+        {
+            "pin": "44",
+            "name": "DOUT3",
+            "type": "dout_bit"
+        },
+        {
+            "type": "vin_pulsecounter",
             "pullup": true,
-            "pin_up": "34",
-            "pin_down": "33"
-        }
-    ],
-    "joints": [
+            "pins": {
+                "up": "34",
+                "down": "33"
+            },
+            "name": "VIN0"
+        },
         {
-            "type": "stepper",
+            "type": "vout_pwm",
+            "pins": {
+                "pwm": "45"
+            },
+            "name": "VOUT0"
+        },
+        {
+            "type": "joint_stepper",
             "cl": false,
             "scale": 800,
             "pins": {
                 "step": "1",
                 "dir": "2"
-            }
+            },
+            "name": "JOINT0"
         },
         {
-            "type": "stepper",
+            "type": "joint_stepper",
             "cl": false,
             "scale": 800,
             "pins": {
                 "step": "3",
                 "dir": "4"
-            }
+            },
+            "name": "JOINT1"
         },
         {
-            "type": "stepper",
+            "type": "joint_stepper",
             "cl": false,
             "scale": 800,
             "pins": {
                 "step": "7",
                 "dir": "8"
-            }
+            },
+            "name": "JOINT2"
         }
     ]
 }

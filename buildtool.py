@@ -1,204 +1,101 @@
-import glob
-import importlib
-import json
+#!/usr/bin/env python3
+#
+#
+
+import argparse
 import os
-import sys
 
-project = {}
-
-project["config"] = sys.argv[1]
-
-data = open(project["config"], "r").read()
-project["jdata"] = json.loads(data)
+import projectLoader
 
 
-# loading plugins
-project["plugins"] = {}
-for path in glob.glob("plugins/*"):
-    plugin = path.split("/")[1]
-    if os.path.isfile(f"plugins/{plugin}/plugin.py"):
-        vplugin = importlib.import_module(".plugin", f"plugins.{plugin}")
-        project["plugins"][plugin] = vplugin.Plugin(project["jdata"])
+def main(configfile, outputdir=None):
 
+    project = projectLoader.load(configfile)
 
-generators = {}
-for path in glob.glob("generators/*"):
-    generator = path.split("/")[1]
-    if os.path.isfile(f"generators/{generator}/{generator}.py"):
-        generators[generator] = importlib.import_module(
-            f".{generator}", f"generators.{generator}"
-        )
-
-
-project["verilog_files"] = []
-project["pinlists"] = {}
-project["expansions"] = {}
-
-project["osc_clock"] = False
-if project["jdata"]["toolchain"] == "icestorm":
-    project["osc_clock"] = project["jdata"]["clock"].get("osc")
-    project["internal_clock"] = project["jdata"]["clock"].get("internal")
-    if project["internal_clock"]:
-        pass
-    elif project["osc_clock"]:
-        project["pinlists"]["main"] = (
-            ("sysclk_in", project["jdata"]["clock"]["pin"], "INPUT", True),
-        )
+    # file structure
+    if outputdir:
+        project["OUTPUT_PATH"] = outputdir
     else:
-        project["pinlists"]["main"] = (
-            ("sysclk", project["jdata"]["clock"]["pin"], "INPUT", True),
-        )
+        project[
+            "OUTPUT_PATH"
+        ] = f"Output/{project['jdata']['name'].replace(' ', '_').replace('/', '_')}"
 
-if "blink" in project["jdata"]:
-    project["pinlists"]["blink"] = (
-        ("BLINK_LED", project["jdata"]["blink"]["pin"], "OUTPUT"),
-    )
-
-if "error" in project["jdata"]:
-    project["pinlists"]["error"] = (
-        ("ERROR_OUT", project["jdata"]["error"]["pin"], "OUTPUT"),
-    )
-
-if "enable" in project['jdata']:
-    project['pinlists']["enable"] = (("ENA", project['jdata']["enable"]["pin"], "OUTPUT"),)
-
-for plugin in project["plugins"]:
-    if hasattr(project["plugins"][plugin], "pinlist"):
-        project["pinlists"][plugin] = project["plugins"][plugin].pinlist()
-    if hasattr(project["plugins"][plugin], "expansions"):
-        project["expansions"][plugin] = project["plugins"][plugin].expansions()
-
-
-# check for double assigned pins
-double_pins = False
-uniq_pins = {}
-for pinlist in project["pinlists"].values():
-    for pinsetup in pinlist:
-        pin_name = pinsetup[0]
-        pin_id = pinsetup[1]
-        if pin_id in uniq_pins:
-            print()
-            print(f"ERROR: pin {pin_id} allready in use")
-            print(f"  old: {uniq_pins[pin_id]}")
-            print(f"  new: {pinsetup}")
-            double_pins = True
-        else:
-            uniq_pins[pin_id] = pinsetup
-if double_pins:
-    print("")
-    exit(1)
-    
-
-project["dins"] = 0
-project["dinnames"] = []
-for plugin in project["plugins"]:
-    if plugin.startswith("din_"):
-        if hasattr(project["plugins"][plugin], "dins"):
-            project["dins"] += project["plugins"][plugin].dins()
-        if hasattr(project["plugins"][plugin], "dinnames"):
-            project["dinnames"] += project["plugins"][plugin].dinnames()
-for plugin in project["plugins"]:
-    if not plugin.startswith("din_"):
-        if hasattr(project["plugins"][plugin], "dins"):
-            project["dins"] += project["plugins"][plugin].dins()
-        if hasattr(project["plugins"][plugin], "dinnames"):
-            project["dinnames"] += project["plugins"][plugin].dinnames()
-
-project["douts"] = 0
-project["doutnames"] = []
-for plugin in project["plugins"]:
-    if plugin.startswith("dout_"):
-        if hasattr(project["plugins"][plugin], "douts"):
-            project["douts"] += project["plugins"][plugin].douts()
-        if hasattr(project["plugins"][plugin], "doutnames"):
-            project["doutnames"] += project["plugins"][plugin].doutnames()
-for plugin in project["plugins"]:
-    if not plugin.startswith("dout_"):
-        if hasattr(project["plugins"][plugin], "douts"):
-            project["douts"] += project["plugins"][plugin].douts()
-        if hasattr(project["plugins"][plugin], "doutnames"):
-            project["doutnames"] += project["plugins"][plugin].doutnames()
-
-
-project["jointtypes"] = []
-for joint in project['jdata']['joints']:
-    project["jointtypes"].append(joint['type'])
-
-
-project["vouts"] = 0
-for plugin in project["plugins"]:
-    if hasattr(project["plugins"][plugin], "vouts"):
-        project["vouts"] += project["plugins"][plugin].vouts()
-
-project["vins"] = 0
-for plugin in project["plugins"]:
-    if hasattr(project["plugins"][plugin], "vins"):
-        project["vins"] += project["plugins"][plugin].vins()
-
-project["joints"] = 0
-for plugin in project["plugins"]:
-    if hasattr(project["plugins"][plugin], "joints"):
-        project["joints"] += project["plugins"][plugin].joints()
-
-project["jointcalcs"] = {}
-for plugin in project["plugins"]:
-    if hasattr(project["plugins"][plugin], "jointcalcs"):
-        project["jointcalcs"].update(project["plugins"][plugin].jointcalcs())
-
-project["joints_en_total"] = (project["joints"] + 7) // 8 * 8
-project["douts_total"] = (project["douts"] + 7) // 8 * 8
-project["dins_total"] = (project["dins"] + 7) // 8 * 8
-project["douts_total"] = max(project["douts_total"], 8)
-project["dins_total"] = max(project["dins_total"], 8)
-
-project["tx_data_size"] = 32
-project["tx_data_size"] += project["joints"] * 32
-project["tx_data_size"] += project["vins"] * 32
-project["tx_data_size"] += project["dins_total"]
-project["rx_data_size"] = 32
-project["rx_data_size"] += project["joints"] * 32
-project["rx_data_size"] += project["vouts"] * 32
-project["rx_data_size"] += project["joints_en_total"]
-project["rx_data_size"] += project["douts_total"]
-project["data_size"] = max(project["tx_data_size"], project["rx_data_size"])
-
-
-# file structure
-project[
-    "OUTPUT_PATH"
-] = f"Output/{project['jdata']['name'].replace(' ', '_').replace('/', '_')}"
-project["FIRMWARE_PATH"] = f"{project['OUTPUT_PATH']}/Firmware"
-project["SOURCE_PATH"] = f"{project['FIRMWARE_PATH']}"
-project["PINS_PATH"] = f"{project['FIRMWARE_PATH']}"
-project["LINUXCNC_PATH"] = f"{project['OUTPUT_PATH']}/LinuxCNC"
-os.system(f"mkdir -p {project['OUTPUT_PATH']}")
-os.system(f"mkdir -p {project['SOURCE_PATH']}")
-os.system(f"mkdir -p {project['PINS_PATH']}")
-os.system(f"mkdir -p {project['LINUXCNC_PATH']}")
-os.system(f"mkdir -p {project['LINUXCNC_PATH']}/Components/")
-os.system(f"mkdir -p {project['LINUXCNC_PATH']}/ConfigSamples/rio")
-os.system(f"mkdir -p {project['LINUXCNC_PATH']}/ConfigSamples/rio/subroutines")
-os.system(f"mkdir -p {project['LINUXCNC_PATH']}/ConfigSamples/rio/m_codes")
-os.system(f"cp -a files/subroutines/* {project['LINUXCNC_PATH']}/ConfigSamples/rio/subroutines")
-
-
-if project["jdata"]["toolchain"] == "diamond":
-    project["SOURCE_PATH"] = f"{project['FIRMWARE_PATH']}/impl1/source"
-    project["PINS_PATH"] = f"{project['FIRMWARE_PATH']}/impl1/source"
+    project["GATEWARE_PATH"] = f"{project['OUTPUT_PATH']}/Gateware"
+    project["SOURCE_PATH"] = f"{project['GATEWARE_PATH']}"
+    project["PINS_PATH"] = f"{project['GATEWARE_PATH']}"
+    project["LINUXCNC_PATH"] = f"{project['OUTPUT_PATH']}/LinuxCNC"
+    os.system(f"mkdir -p {project['OUTPUT_PATH']}")
     os.system(f"mkdir -p {project['SOURCE_PATH']}")
     os.system(f"mkdir -p {project['PINS_PATH']}")
+    os.system(f"mkdir -p {project['LINUXCNC_PATH']}")
+    os.system(f"mkdir -p {project['LINUXCNC_PATH']}/Components/")
+    os.system(f"mkdir -p {project['LINUXCNC_PATH']}/ConfigSamples/rio")
+    os.system(f"mkdir -p {project['LINUXCNC_PATH']}/ConfigSamples/rio/subroutines")
+    os.system(f"mkdir -p {project['LINUXCNC_PATH']}/ConfigSamples/rio/m_codes")
+    os.system(
+        f"cp -a files/subroutines/* {project['LINUXCNC_PATH']}/ConfigSamples/rio/subroutines"
+    )
+
+    if project["verilog_defines"]:
+        verilog_defines = []
+        for key, value in project["verilog_defines"].items():
+            verilog_defines.append(f"`define {key} {value}")
+        verilog_defines.append("")
+        open(f"{project['SOURCE_PATH']}/defines.v", "w").write(
+            "\n".join(verilog_defines)
+        )
+        project["verilog_files"].append("defines.v")
+
+    if project["gateware_extrafiles"]:
+        for filename, content in project["gateware_extrafiles"].items():
+            open(f"{project['SOURCE_PATH']}/{filename}", "w").write(content)
+
+    for plugin in project["plugins"]:
+        if hasattr(project["plugins"][plugin], "ips"):
+            for ipv in project["plugins"][plugin].ips():
+                ipv_name = ipv.split("/")[-1]
+                if ipv.endswith((".v", ".sv")):
+                    if ipv_name not in project["verilog_files"]:
+                        project["verilog_files"].append(ipv_name)
+                ipv_path = f"plugins/{plugin}/{ipv}"
+                if not os.path.isfile(ipv_path):
+                    ipv_path = f"generators/gateware/{ipv}"
+                os.system(f"cp -a {ipv_path} {project['SOURCE_PATH']}/{ipv_name}")
+                """
+                if ipv.endswith(".v") and not ipv.startswith("PLL_"):
+                    os.system(
+                        f"which verilator >/dev/null && cd {project['SOURCE_PATH']} && verilator --lint-only {ipv}"
+                    )
+                """
+
+        if hasattr(project["plugins"][plugin], "components"):
+            for component in project["plugins"][plugin].components():
+                project["component_files"].append(component)
+                component_path = f"plugins/{plugin}/{component}"
+                if not os.path.isfile(component_path):
+                    component_path = f"generators/firmware/{component}"
+                os.system(
+                    f"cp -a {component_path} {project['LINUXCNC_PATH']}/Components/{component}"
+                )
+
+    print(f"generating files in {project['OUTPUT_PATH']}")
+
+    for generator in project["generators"]:
+        if generator != "documentation":
+            project["generators"][generator].generate(project)
+    for generator in project["generators"]:
+        if generator == "documentation":
+            project["generators"][generator].generate(project)
 
 
-for plugin in project["plugins"]:
-    if hasattr(project["plugins"][plugin], "ips"):
-        for ipv in project["plugins"][plugin].ips():
-            project["verilog_files"].append(ipv)
-            # os.system(f"verilator --lint-only -Wall plugins/{plugin}/{ipv}")
-            os.system(f"which verilator >/dev/null && verilator --lint-only plugins/{plugin}/{ipv}")
-            os.system(f"cp -a plugins/{plugin}/{ipv} {project['SOURCE_PATH']}/{ipv}")
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "configfile", help="json config file", type=str, nargs="?", default=None
+    )
+    parser.add_argument(
+        "outputdir", help="output directory", type=str, nargs="?", default=None
+    )
+    args = parser.parse_args()
 
-print(f"generating files in {project['OUTPUT_PATH']}")
-
-
-for generator in generators.values():
-    generator.generate(project)
+    main(args.configfile, args.outputdir)

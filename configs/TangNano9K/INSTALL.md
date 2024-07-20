@@ -19,12 +19,12 @@ cd LinuxCNC-RIO
 ## patching the oss-cad-suite
 to fix a bug in oss-cad-suite, please run this patch command:
 ```
-bash patching-oss-cad-suite.sh PATH_TO_OSS_CAD_SUITE
+bash files/patching-oss-cad-suite.sh PATH_TO_OSS_CAD_SUITE
 ```
 
 in my case:
 ```
-bash patching-oss-cad-suite.sh /opt/oss-cad-suite
+bash files/patching-oss-cad-suite.sh /opt/oss-cad-suite
 ```
 
 ### copy default config to avoid errors during update
@@ -55,7 +55,7 @@ in this case, please first flash the ethernet-board, check the IP and edit the j
 connect the TangNano9K board to your USB-Port and run:
 ```
 (
-cd Output/TangNano9K/Firmware
+cd Output/TangNano9K/Gateware
 make all
 sudo make load
 )
@@ -107,7 +107,7 @@ cd UDP2SPI-Bridge/ESP32-PoE-ISO
 make build
 ```
 
-then connect the Ethernet-Board to your USB and flash the Firmware:
+then connect the Ethernet-Board to your USB and flash the Gateware:
 
 ```
 make upload

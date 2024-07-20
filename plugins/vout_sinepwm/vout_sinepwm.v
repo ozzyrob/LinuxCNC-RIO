@@ -2,7 +2,7 @@
 /* verilator lint_off DECLFILENAME */
 
 module vout_sinepwm
-    #(parameter START = 0, parameter DIVIDER = 255)
+    #(parameter START = 0, parameter DIVIDER = 1000)
      (
          input clk,
          input signed [31:0] freq,
@@ -14,32 +14,43 @@ module vout_sinepwm
     reg [7:0] cnt = START;
     reg [7:0] dty = 0;
 
-    always@ (posedge(clk))
-    begin
-        clk_cnt = clk_cnt + 1;
-        if (freq > 0) begin
-            freq_abs = freq;
+    reg [31:0] counter = 0;
+    reg pwmclk = 0;
+    always @(posedge clk) begin
+        if (counter == 0) begin
+            counter <= DIVIDER;
+            pwmclk <= ~pwmclk;
         end else begin
-            freq_abs = -freq;
+            counter <= counter - 1;
+        end
+    end
+
+    always@ (posedge(pwmclk))
+    begin
+        clk_cnt <= clk_cnt + 1;
+        if (freq > 0) begin
+            freq_abs <= freq;
+        end else begin
+            freq_abs <= -freq;
         end
         if (clk_cnt >= freq_abs) begin
-            clk_cnt = 0;
+            clk_cnt <= 0;
 
             if (freq_abs == 0) begin
-                dty = 0;
+                dty <= 0;
             end else begin
-                dty = sine_tbl[cnt];
+                dty <= sine_tbl[cnt];
                 if (freq > 0) begin
-                    cnt = cnt + 1;
+                    cnt <= cnt + 8'd1;
                 end else begin
-                    cnt = cnt - 1;
+                    cnt <= cnt - 8'd1;
                 end
             end
 
-            if (cnt == 29)
-                cnt = 0;
-            if (cnt == 255)
-                cnt = 29;
+            if (cnt == 8'd29)
+                cnt <= 8'd0;
+            if (cnt == 8'd255)
+                cnt <= 8'd29;
         end
     end
 
@@ -78,8 +89,8 @@ module vout_sinepwm
     end
 
     wire dir1;
-    vout_sine_pwm #(DIVIDER) vout_sine_pwm1 (
-                      .clk (clk),
+    vout_sine_pwm vout_sine_pwm1 (
+                      .clk (pwmclk),
                       .dty ({24'h000000, dty}),
                       .dir (dir1),
                       .pwm (pwm_out)
@@ -101,25 +112,25 @@ module vout_sine_pwm
     assign pwm = pulse;
     reg direction = 0;
     assign dir = direction;
-    reg [31:0] counter = 0;
+    reg [31:0] counter = 32'd0;
     always @ (posedge clk) begin
-        if (dty > 0) begin
-            dtyAbs = dty;
-            direction = 1;
+        if (dty > 32'd0) begin
+            dtyAbs <= dty;
+            direction <= 1'd1;
         end else begin
-            dtyAbs = -dty;
-            direction = 0;
+            dtyAbs <= -dty;
+            direction <= 1'd0;
         end
         if (dtyAbs != 0) begin
-            counter = counter + 1;
+            counter <= counter + 1;
             if (counter == DIVIDER) begin
-                pulse = 1;
-                counter = 0;
+                pulse <= 1'd1;
+                counter <= 32'd0;
             end else if (counter == dtyAbs) begin
-                pulse = 0;
+                pulse <= 1'd0;
             end
         end else begin
-            pulse = 0;
+            pulse <= 1'd0;
         end
     end
 endmodule

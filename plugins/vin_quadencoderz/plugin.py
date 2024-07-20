@@ -1,4 +1,6 @@
 class Plugin:
+    ptype = "vin_quadencoderz"
+
     def __init__(self, jdata):
         self.jdata = jdata
 
@@ -6,9 +8,21 @@ class Plugin:
         return [
             {
                 "basetype": "vin",
-                "subtype": "quadencoderz",
+                "subtype": self.ptype,
                 "comment": "quad-encoder input with z-pin",
                 "options": {
+                    "name": {
+                        "type": "str",
+                        "name": "pin name",
+                        "comment": "the name of the pin",
+                        "default": "",
+                    },
+                    "net": {
+                        "type": "vtarget",
+                        "name": "net target",
+                        "comment": "the target net of the pin in the hal",
+                        "default": "",
+                    },
                     "debounce": {
                         "type": "bool",
                         "name": "debounce",
@@ -18,18 +32,24 @@ class Plugin:
                     "quadType": {
                         "type": "int",
                         "name": "type of encoder (0, 2)",
+                        "default": "2",
                     },
-                    "pin_a": {
-                        "type": "input",
-                        "name": "input pin A",
-                    },
-                    "pin_b": {
-                        "type": "input",
-                        "name": "input pin B",
-                    },
-                    "pin_z": {
-                        "type": "input",
-                        "name": "input pin Z",
+                    "pins": {
+                        "type": "dict",
+                        "options": {
+                            "a": {
+                                "type": "input",
+                                "name": "input pin A",
+                            },
+                            "b": {
+                                "type": "input",
+                                "name": "input pin B",
+                            },
+                            "z": {
+                                "type": "input",
+                                "name": "input pin Z",
+                            },
+                        },
                     },
                 },
             }
@@ -37,110 +57,109 @@ class Plugin:
 
     def pinlist(self):
         pinlist_out = []
-        for num, vin in enumerate(self.jdata.get("vin", [])):
-            if vin.get("type") == "quadencoderz":
-                pullup = vin.get("pullup", False)
-                pinlist_out.append(
-                    (f"VIN{num}_ENCODER_A", vin["pin_a"], "INPUT", pullup)
-                )
-                pinlist_out.append(
-                    (f"VIN{num}_ENCODER_B", vin["pin_b"], "INPUT", pullup)
-                )
-                pinlist_out.append(
-                    (f"VIN{num}_ENCODER_Z", vin["pin_z"], "INPUT", pullup)
-                )
+        for num, data in enumerate(self.jdata["plugins"]):
+            if data.get("type") == self.ptype:
+                pullup = data.get("pullup", False)
+                pins = data.get("pins", {})
+                pin_a = pins.get("a", data.get("pin_a"))
+                pin_b = pins.get("b", data.get("pin_b"))
+                pin_z = pins.get("z", data.get("pin_z"))
+                pinlist_out.append((f"VIN{num}_ENCODER_A", pin_a, "INPUT", pullup))
+                pinlist_out.append((f"VIN{num}_ENCODER_B", pin_b, "INPUT", pullup))
+                pinlist_out.append((f"VIN{num}_ENCODER_Z", pin_z, "INPUT", pullup))
         return pinlist_out
 
-    def vins(self):
-        vins_out = 0
-        for _num, vin in enumerate(self.jdata.get("vin", [])):
-            if vin.get("type") == "quadencoderz":
-                vins_out += 1
-        return vins_out
-
-    def dins(self):
-        dins_out = 0
-        for num, vin in enumerate(self.jdata.get("vin", [])):
-            if vin.get("type") == "quadencoderz":
-                dins_out += 1
-        return dins_out
-
-    def douts(self):
-        douts_out = 0
-        for num, vin in enumerate(self.jdata.get("vin", [])):
-            if vin.get("type") == "quadencoderz":
-                douts_out += 1
-        return douts_out
+    def vinnames(self):
+        ret = []
+        for num, data in enumerate(self.jdata["plugins"]):
+            if data.get("type") == self.ptype:
+                name = data.get("name", f"PV.{num}")
+                nameIntern = name.replace(".", "").replace("-", "_").upper()
+                data["_name"] = name
+                data["_prefix"] = nameIntern
+                ret.append(data.copy())
+        return ret
 
     def dinnames(self):
-        dins_out = []
-        for num, vin in enumerate(self.jdata.get("vin", [])):
-            if vin.get("type") == "quadencoderz":
-                dins_out.append(f"VIN{num}_ENCODER_INDEX_OUT")
-        return dins_out
+        ret = []
+        for num, data in enumerate(self.jdata["plugins"]):
+            if data.get("type") == self.ptype:
+                name = data.get("name", f"PV.{num}") + "-index-enable-out"
+                nameIntern = name.replace(".", "").replace("-", "_").upper()
+                data["_name"] = name
+                data["_prefix"] = nameIntern
+                ret.append(data.copy())
+        return ret
 
     def doutnames(self):
-        douts_out = []
-        for num, vin in enumerate(self.jdata.get("vin", [])):
-            if vin.get("type") == "quadencoderz":
-                douts_out.append(f"VIN{num}_ENCODER_INDEX_ENABLE")
-        return douts_out
+        ret = []
+        for num, data in enumerate(self.jdata["plugins"]):
+            if data.get("type") == self.ptype:
+                name = data.get("name", f"PV.{num}") + "-index-enable"
+                nameIntern = name.replace(".", "").replace("-", "_").upper()
+                data["_name"] = name
+                data["_prefix"] = nameIntern
+                ret.append(data.copy())
+        return ret
 
     def defs(self):
-        defs_out = ["    // vin_quadencoderz's"]
-        for num, vin in enumerate(self.jdata.get("vin", [])):
-            if vin.get("type") == "quadencoderz":
-                defs_out.append(f"    wire VIN{num}_ENCODER_INDEX_OUT;")
-                defs_out.append(f"    wire VIN{num}_ENCODER_INDEX_ENABLE;")
-        return defs_out
-
+        ret = []
+        for num, data in enumerate(self.jdata["plugins"]):
+            if data.get("type") == self.ptype:
+                name = data.get("name", f"PV.{num}")
+                nameIntern = name.replace(".", "").replace("-", "_").upper()
+                ret.append(f"    wire {nameIntern}_INDEX_ENABLE_OUT;")
+                ret.append(f"    wire {nameIntern}_INDEX_ENABLE;")
+        return ret
 
     def funcs(self):
-        func_out = ["    // vin_quadencoderz's"]
-        for num, vin in enumerate(self.jdata.get("vin", [])):
-            if vin.get("type") == "quadencoderz":
-                debounce = vin.get("debounce", False)
-                quadType = vin.get("quadType", 0)
-
+        ret = []
+        for num, data in enumerate(self.jdata["plugins"]):
+            if data.get("type") == self.ptype:
+                name = data.get("name", f"PV.{num}")
+                nameIntern = name.replace(".", "").replace("-", "_").upper()
+                debounce = data.get("debounce", False)
+                quadType = data.get("quadType", 2)
                 if debounce:
-                    func_out.append(f"    wire VIN{num}_ENCODER_A_DEBOUNCED;")
-                    func_out.append(f"    wire VIN{num}_ENCODER_B_DEBOUNCED;")
-                    func_out.append(f"    wire VIN{num}_ENCODER_Z_DEBOUNCED;")
-                    func_out.append(f"    debouncer #(16) vin_debouncer{num}_A (")
-                    func_out.append("        .clk (sysclk),")
-                    func_out.append(f"        .SIGNAL (VIN{num}_ENCODER_A),")
-                    func_out.append(f"        .SIGNAL_state (VIN{num}_ENCODER_A_DEBOUNCED)")
-                    func_out.append("    );")
-                    func_out.append(f"    debouncer #(16) vin_debouncer{num}_B (")
-                    func_out.append("        .clk (sysclk),")
-                    func_out.append(f"        .SIGNAL (VIN{num}_ENCODER_B),")
-                    func_out.append(f"        .SIGNAL_state (VIN{num}_ENCODER_B_DEBOUNCED)")
-                    func_out.append("    );")
-                    func_out.append(f"    debouncer #(16) vin_debouncer{num}_Z (")
-                    func_out.append("        .clk (sysclk),")
-                    func_out.append(f"        .SIGNAL (VIN{num}_ENCODER_Z),")
-                    func_out.append(f"        .SIGNAL_state (VIN{num}_ENCODER_Z_DEBOUNCED)")
-                    func_out.append("    );")
+                    ret.append(f"    wire VIN{num}_ENCODER_A_DEBOUNCED;")
+                    ret.append(f"    wire VIN{num}_ENCODER_B_DEBOUNCED;")
+                    ret.append(f"    wire VIN{num}_ENCODER_Z_DEBOUNCED;")
+                    ret.append(f"    debouncer #(16) vin_debouncer{num}_A (")
+                    ret.append("        .clk (sysclk),")
+                    ret.append(f"        .SIGNAL (VIN{num}_ENCODER_A),")
+                    ret.append(f"        .SIGNAL_state (VIN{num}_ENCODER_A_DEBOUNCED)")
+                    ret.append("    );")
+                    ret.append(f"    debouncer #(16) vin_debouncer{num}_B (")
+                    ret.append("        .clk (sysclk),")
+                    ret.append(f"        .SIGNAL (VIN{num}_ENCODER_B),")
+                    ret.append(f"        .SIGNAL_state (VIN{num}_ENCODER_B_DEBOUNCED)")
+                    ret.append("    );")
+                    ret.append(f"    debouncer #(16) vin_debouncer{num}_Z (")
+                    ret.append("        .clk (sysclk),")
+                    ret.append(f"        .SIGNAL (VIN{num}_ENCODER_Z),")
+                    ret.append(f"        .SIGNAL_state (VIN{num}_ENCODER_Z_DEBOUNCED)")
+                    ret.append("    );")
 
-                func_out.append(f"    vin_quadencoderz #(32, {quadType}) vin_quadencoderz{num} (")
-                func_out.append("        .clk (sysclk),")
+                ret.append(
+                    f"    vin_quadencoderz #(32, {quadType}) vin_quadencoderz{num} ("
+                )
+                ret.append("        .clk (sysclk),")
                 if debounce:
-                    func_out.append(f"        .quadA (VIN{num}_ENCODER_A_DEBOUNCED),")
-                    func_out.append(f"        .quadB (VIN{num}_ENCODER_B_DEBOUNCED),")
-                    func_out.append(f"        .quadZ (VIN{num}_ENCODER_Z_DEBOUNCED),")
+                    ret.append(f"        .quadA (VIN{num}_ENCODER_A_DEBOUNCED),")
+                    ret.append(f"        .quadB (VIN{num}_ENCODER_B_DEBOUNCED),")
+                    ret.append(f"        .quadZ (VIN{num}_ENCODER_Z_DEBOUNCED),")
                 else:
-                    func_out.append(f"        .quadA (VIN{num}_ENCODER_A),")
-                    func_out.append(f"        .quadB (VIN{num}_ENCODER_B),")
-                    func_out.append(f"        .quadZ (VIN{num}_ENCODER_Z),")
-                func_out.append(f"        .index_enable (VIN{num}_ENCODER_INDEX_ENABLE),")
-                func_out.append(f"        .index_out (VIN{num}_ENCODER_INDEX_OUT),")
-                func_out.append(f"        .pos (processVariable{num})")
-                func_out.append("    );")
-
-        return func_out
+                    ret.append(f"        .quadA (VIN{num}_ENCODER_A),")
+                    ret.append(f"        .quadB (VIN{num}_ENCODER_B),")
+                    ret.append(f"        .quadZ (VIN{num}_ENCODER_Z),")
+                ret.append(f"        .index_enable ({nameIntern}_INDEX_ENABLE),")
+                ret.append(f"        .index_out ({nameIntern}_INDEX_ENABLE_OUT),")
+                ret.append(f"        .pos ({nameIntern})")
+                ret.append("    );")
+        return ret
 
     def ips(self):
-        for num, vin in enumerate(self.jdata["vin"]):
-            if vin["type"] in ["quadencoderz"]:
+        for num, data in enumerate(self.jdata["plugins"]):
+            if data["type"] == self.ptype:
                 return ["vin_quadencoderz.v"]
         return []
